@@ -1308,6 +1308,10 @@ def rerun_inference(
     type=int,
     help="Limit number of files to process (for testing purposes)",
 )
+@click.option(
+    "--config-version",
+    help="Configuration version to use for processing (e.g., v1, v2)",
+)
 def run_inference(
     stack_name: str,
     manifest: Optional[str],
@@ -1324,6 +1328,7 @@ def run_inference(
     refresh_interval: int,
     region: Optional[str],
     number_of_files: Optional[int],
+    config_version: Optional[str],
 ):
     """
     Run inference on a batch of documents
@@ -1367,6 +1372,9 @@ def run_inference(
 
       # Process test set with limited files for quick testing
       idp-cli run-inference --stack-name my-stack --test-set fcc-example-test --number-of-files 5 --monitor
+
+      # Process with specific configuration version
+      idp-cli run-inference --stack-name my-stack --dir ./documents/ --config-version v2 --monitor
 
       # Process manifest with baselines (automatically creates "idp-cli" test set for Test Studio integration)
       idp-cli run-inference --stack-name my-stack --manifest docs_with_baselines.csv --monitor
@@ -1456,6 +1464,7 @@ def run_inference(
                         output_prefix=batch_prefix,
                         batch_id=batch_id,
                         number_of_files=number_of_files,
+                        config_version=config_version,
                     )
             elif directory:
                 batch_result = processor.process_batch_from_directory(
@@ -1465,6 +1474,7 @@ def run_inference(
                     output_prefix=batch_prefix,
                     batch_id=batch_id,
                     number_of_files=number_of_files,
+                    config_version=config_version,
                 )
             else:  # s3_uri
                 batch_result = processor.process_batch_from_s3_uri(

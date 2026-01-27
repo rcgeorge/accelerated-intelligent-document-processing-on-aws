@@ -257,6 +257,7 @@ const TestComparison = ({ preSelectedTestRunIds = [] }) => {
     const performanceRows = [
       ['Test Set', ...Object.values(completeTestRuns).map((run) => run.testSetName || 'N/A')],
       ['Context', ...Object.values(completeTestRuns).map((run) => run.context || 'N/A')],
+      ['Config Version', ...Object.values(completeTestRuns).map((run) => run.configVersion || 'N/A')],
       ['Files Processed', ...Object.values(completeTestRuns).map((run) => run.filesCount || 'N/A')],
       ['Files Completed', ...Object.values(completeTestRuns).map((run) => run.completedFiles || 'N/A')],
       ['Files Failed', ...Object.values(completeTestRuns).map((run) => run.failedFiles || 'N/A')],
@@ -305,6 +306,7 @@ const TestComparison = ({ preSelectedTestRunIds = [] }) => {
           return 'N/A';
         }),
       ],
+      ['Config Version', ...Object.values(completeTestRuns).map((run) => run.configVersion || 'N/A')],
     ];
 
     // Add cost breakdown rows
@@ -538,6 +540,7 @@ const TestComparison = ({ preSelectedTestRunIds = [] }) => {
           {
             testSetName: testRun.testSetName,
             context: testRun.context,
+            configVersion: testRun.configVersion,
             filesCount: testRun.filesCount,
             completedFiles: testRun.completedFiles,
             failedFiles: testRun.failedFiles,

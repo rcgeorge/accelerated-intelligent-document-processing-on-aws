@@ -216,6 +216,7 @@ def get_test_results(test_run_id):
                 'createdAt': _format_datetime(metadata.get('CreatedAt')),
                 'completedAt': _format_datetime(metadata.get('CompletedAt')),
                 'context': metadata.get('Context'),
+                'configVersion': metadata.get('ConfigVersion'),
                 'config': _get_test_run_config(test_run_id)
             }
     
@@ -240,6 +241,7 @@ def get_test_results(test_run_id):
         'createdAt': _format_datetime(metadata.get('CreatedAt')),
         'completedAt': _format_datetime(metadata.get('CompletedAt')),
         'context': metadata.get('Context'),
+        'configVersion': metadata.get('ConfigVersion'),
         'config': _get_test_run_config(test_run_id)
     }
 

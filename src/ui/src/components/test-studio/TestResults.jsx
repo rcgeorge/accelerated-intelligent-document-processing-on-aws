@@ -872,6 +872,12 @@ const TestResults = ({ testRunId, setSelectedTestRunId }) => {
                 : 'N/A'}
             </Box>
           </Box>
+          {results.configVersion && (
+            <Box>
+              <Box variant="awsui-key-label">Config Version</Box>
+              <Box fontSize="heading-l">{results.configVersion}</Box>
+            </Box>
+          )}
         </ColumnLayout>
 
         {/* Weighted Overall Scores Distribution Chart */}

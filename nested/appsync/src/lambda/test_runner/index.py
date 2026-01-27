@@ -23,6 +23,7 @@ def handler(event, context):
         test_set_id = input_data['testSetId']
         test_context = input_data.get('context', '')
         number_of_files = input_data.get('numberOfFiles')
+        config_version = input_data.get('configVersion')
         tracking_table = os.environ['TRACKING_TABLE']
         config_table = os.environ['CONFIG_TABLE']
         
@@ -50,7 +51,7 @@ def handler(event, context):
         config = _capture_config(config_table)
         
         # Store initial test run metadata
-        _store_test_run_metadata(tracking_table, test_run_id, test_set_id, test_set['name'], config, [], test_context, files_to_process)
+        _store_test_run_metadata(tracking_table, test_run_id, test_set_id, test_set['name'], config, [], test_context, files_to_process, config_version)
         
         # Send file copying job to SQS queue
         queue_url = os.environ['FILE_COPY_QUEUE_URL']
@@ -64,6 +65,10 @@ def handler(event, context):
         # Only include numberOfFiles if it was specified
         if number_of_files is not None:
             message_body['numberOfFiles'] = number_of_files
+            
+        # Include configVersion if specified
+        if config_version is not None:
+            message_body['configVersion'] = config_version
         
         sqs.send_message(
             QueueUrl=queue_url,
@@ -117,7 +122,7 @@ def _capture_config(config_table):
     
     return config
 
-def _store_test_run_metadata(tracking_table, test_run_id, test_set_id, test_set_name, config, files, context=None, file_count=0):
+def _store_test_run_metadata(tracking_table, test_run_id, test_set_id, test_set_name, config, files, context=None, file_count=0, config_version=None):
     """Store test run metadata in tracking table"""
     table = dynamodb.Table(tracking_table)  # type: ignore[attr-defined]
     
@@ -139,6 +144,9 @@ def _store_test_run_metadata(tracking_table, test_run_id, test_set_id, test_set_
         
         if context:
             item['Context'] = context
+            
+        if config_version:
+            item['ConfigVersion'] = config_version
             
         table.put_item(Item=item)
         logger.info(f"Stored test run metadata for {test_run_id}")

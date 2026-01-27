@@ -382,6 +382,7 @@ type TestRun @aws_cognito_user_pools @aws_iam {
   createdAt: AWSDateTime
   completedAt: AWSDateTime
   context: String
+  configVersion: String
   config: AWSJSON
 }
 
@@ -440,6 +441,7 @@ input TestRunInput {
   testSetId: String!
   context: String
   numberOfFiles: Int
+  configVersion: String
 }
 
 type AgentChatMessage @aws_cognito_user_pools @aws_iam {
@@ -500,6 +502,7 @@ type Mutation {
     contentType: String
     prefix: String
     bucket: String
+    version: String
   ): PresignedUrlResponse! @aws_cognito_user_pools
   uploadDiscoveryDocument(
     fileName: String!

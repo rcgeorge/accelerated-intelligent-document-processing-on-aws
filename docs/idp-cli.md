@@ -468,6 +468,7 @@ idp-cli run-inference [OPTIONS]
 - `--recursive/--no-recursive`: Include subdirectories (default: recursive)
 - `--number-of-files`: Limit number of files to process
 - `--config`: Path to configuration YAML file (optional)
+- `--config-version`: Configuration version to use for processing (e.g., v1, v2)
 - `--context`: Context description for test run (used with --test-set, e.g., "Model v2.1", "Production validation")
 - `--monitor`: Monitor progress until completion
 - `--refresh-interval`: Seconds between status checks (default: 5)
@@ -526,6 +527,21 @@ idp-cli run-inference \
 idp-cli run-inference \
     --stack-name my-stack \
     --s3-uri archive/2024/ \
+    --monitor
+
+# Process with specific configuration version
+idp-cli run-inference \
+    --stack-name my-stack \
+    --dir ./documents/ \
+    --config-version v2 \
+    --monitor
+
+# Process test set with configuration version
+idp-cli run-inference \
+    --stack-name my-stack \
+    --test-set fcc-example-test \
+    --config-version v1 \
+    --context "Testing with config v1" \
     --monitor
 ```
 

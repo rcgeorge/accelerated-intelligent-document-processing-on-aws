@@ -2,23 +2,36 @@
 // SPDX-License-Identifier: MIT-0
 
 // src/components/upload-document/UploadDocumentPanel.jsx
-import React, { useState } from 'react';
-import { Button, Container, Header, SpaceBetween, FormField, StatusIndicator, Alert, Input } from '@cloudscape-design/components';
+import React, { useState, useEffect } from 'react';
+import { Button, Container, Header, SpaceBetween, FormField, StatusIndicator, Alert, Input, Select } from '@cloudscape-design/components';
 import { generateClient } from 'aws-amplify/api';
 
 import uploadDocument from '../../graphql/queries/uploadDocument';
-
+import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import useSettingsContext from '../../contexts/settings';
 
 const client = generateClient();
 
 const UploadDocumentPanel = () => {
   const { settings } = useSettingsContext();
+  const { versions } = useConfigurationVersions();
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState([]);
   const [error, setError] = useState(null);
   const [prefix, setPrefix] = useState('');
+  const [selectedVersion, setSelectedVersion] = useState(null);
+
+  // Set default to active version when versions are loaded
+  useEffect(() => {
+    if (versions.length > 0 && !selectedVersion) {
+      const activeVersion = versions.find((v) => v.isActive);
+      if (activeVersion) {
+        const versionOption = { label: `${activeVersion.versionId} (Active)`, value: activeVersion.versionId };
+        setSelectedVersion(versionOption);
+      }
+    }
+  }, [versions, selectedVersion]);
 
   if (!settings.InputBucket) {
     return (
@@ -68,6 +81,7 @@ const UploadDocumentPanel = () => {
               contentType: file.type,
               prefix: prefix || '', // Use the user-provided prefix or empty string
               bucket: settings.InputBucket, // Explicitly pass the input bucket
+              version: selectedVersion?.value, // Pass selected version (optional)
             },
           });
 
@@ -149,6 +163,21 @@ const UploadDocumentPanel = () => {
       <SpaceBetween size="l">
         <FormField label="Optional folder prefix (e.g., invoices/2024)">
           <Input value={prefix} onChange={handlePrefixChange} placeholder="Leave empty for root folder" disabled={isUploading} />
+        </FormField>
+
+        <FormField label="Configuration Version" description="Select which configuration version to use for processing these documents">
+          <Select
+            selectedOption={selectedVersion}
+            onChange={({ detail }) => setSelectedVersion(detail.selectedOption)}
+            options={versions.map((version) => ({
+              label: version.isActive ? `${version.versionId} (Active)` : version.versionId,
+              value: version.versionId,
+              description: version.description,
+            }))}
+            placeholder={versions.length === 0 ? 'Loading versions...' : 'Select configuration version'}
+            disabled={isUploading || versions.length === 0}
+            loadingText="Loading versions..."
+          />
         </FormField>
 
         <FormField label="Select files to upload">

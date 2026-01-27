@@ -64,6 +64,7 @@ class BatchProcessor:
         output_prefix: str = "cli-batch",
         batch_id: Optional[str] = None,
         number_of_files: Optional[int] = None,
+        config_version: Optional[str] = None,
     ) -> Dict:
         """
         Process batch of documents from manifest
@@ -94,7 +95,7 @@ class BatchProcessor:
 
         # Process documents
         return self._process_documents(
-            documents, batch_id, output_prefix, manifest_path
+            documents, batch_id, output_prefix, manifest_path, config_version
         )
 
     def process_batch_from_directory(
@@ -105,6 +106,7 @@ class BatchProcessor:
         output_prefix: str = "cli-batch",
         batch_id: Optional[str] = None,
         number_of_files: Optional[int] = None,
+        config_version: Optional[str] = None,
     ) -> Dict:
         """
         Process batch of documents from local directory
@@ -142,7 +144,12 @@ class BatchProcessor:
 
         # Process documents
         return self._process_documents(
-            documents, batch_id, output_prefix, dir_path, base_dir=dir_path
+            documents,
+            batch_id,
+            output_prefix,
+            dir_path,
+            config_version,
+            base_dir=dir_path,
         )
 
     def process_batch_from_s3_uri(
@@ -206,6 +213,7 @@ class BatchProcessor:
         batch_id: str,
         output_prefix: str,
         source: str,
+        config_version: Optional[str] = None,
         base_dir: Optional[str] = None,
     ) -> Dict:
         """
@@ -250,7 +258,9 @@ class BatchProcessor:
 
                 # Handle document upload/reference
                 # S3 upload automatically triggers EventBridge -> QueueSender -> SQS
-                s3_key = self._process_document_with_base(doc, batch_id, base_dir)
+                s3_key = self._process_document_with_base(
+                    doc, batch_id, base_dir, config_version
+                )
 
                 results["document_ids"].append(
                     s3_key
@@ -394,7 +404,11 @@ class BatchProcessor:
             raise
 
     def _process_document_with_base(
-        self, doc: Dict, batch_id: str, base_dir: Optional[str] = None
+        self,
+        doc: Dict,
+        batch_id: str,
+        base_dir: Optional[str] = None,
+        config_version: Optional[str] = None,
     ) -> str:
         """
         Process document with optional base directory for path preservation
@@ -409,12 +423,14 @@ class BatchProcessor:
         """
         if doc["type"] == "local":
             # Upload local file with path preservation
-            s3_key = self._upload_local_file_with_path(doc, batch_id, base_dir)
+            s3_key = self._upload_local_file_with_path(
+                doc, batch_id, base_dir, config_version
+            )
             logger.info(f"Uploaded {doc['filename']} to {s3_key}")
             return s3_key
         elif doc["type"] == "s3":
             # Copy from external S3 location to InputBucket
-            s3_key = self._copy_s3_file(doc, batch_id)
+            s3_key = self._copy_s3_file(doc, batch_id, config_version)
             logger.info(f"Copied {doc['filename']} from {doc['path']} to {s3_key}")
             return s3_key
         elif doc["type"] == "s3-key":
@@ -427,7 +443,11 @@ class BatchProcessor:
             raise ValueError(f"Unknown document type: {doc['type']}")
 
     def _upload_local_file_with_path(
-        self, doc: Dict, batch_id: str, base_dir: Optional[str] = None
+        self,
+        doc: Dict,
+        batch_id: str,
+        base_dir: Optional[str] = None,
+        config_version: Optional[str] = None,
     ) -> str:
         """
         Upload local file to S3 InputBucket with path preservation
@@ -452,9 +472,15 @@ class BatchProcessor:
             # Standardized: batch_id/filename
             s3_key = f"{batch_id}/{filename}"
 
-        # Upload file
+        # Upload file with metadata
         input_bucket = self.resources["InputBucket"]
-        self.s3.upload_file(Filename=local_path, Bucket=input_bucket, Key=s3_key)
+        extra_args = {}
+        if config_version:
+            extra_args["Metadata"] = {"config-version": config_version}
+
+        self.s3.upload_file(
+            Filename=local_path, Bucket=input_bucket, Key=s3_key, ExtraArgs=extra_args
+        )
 
         return s3_key
 

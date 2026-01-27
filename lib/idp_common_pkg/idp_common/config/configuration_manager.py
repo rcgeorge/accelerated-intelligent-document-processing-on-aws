@@ -430,13 +430,7 @@ class ConfigurationManager:
             logger.error(f"Error listing config versions: {e}")
             return []
 
-    def get_next_version_id(self) -> str:
-        """
-        Get the next available version ID.
-        
-        Returns:
-            Next version ID (e.g., "v2" if v0, v1 exist)
-        """
+
     def get_next_version_id(self) -> str:
         """
         Get the next available version ID.

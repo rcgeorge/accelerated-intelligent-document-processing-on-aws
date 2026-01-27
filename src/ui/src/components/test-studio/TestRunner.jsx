@@ -8,6 +8,7 @@ import { ConsoleLogger } from 'aws-amplify/utils';
 import START_TEST_RUN from '../../graphql/queries/startTestRun';
 import GET_TEST_SETS from '../../graphql/queries/getTestSets';
 import handlePrint from './PrintUtils';
+import useConfigurationVersions from '../../hooks/use-configuration-versions';
 
 const client = generateClient();
 const logger = new ConsoleLogger('TestRunner');
@@ -15,10 +16,37 @@ const logger = new ConsoleLogger('TestRunner');
 const TestRunner = ({ onTestStart, onTestComplete, activeTestRuns }) => {
   const [testSets, setTestSets] = useState([]);
   const [selectedTestSet, setSelectedTestSet] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState(null);
   const [numberOfFiles, setNumberOfFiles] = useState('');
   const [context, setContext] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { versions, loading: versionsLoading } = useConfigurationVersions();
+
+  // Set default to active version when versions are loaded
+  React.useEffect(() => {
+    if (versions.length > 0 && !selectedVersion) {
+      const activeVersion = versions.find((v) => v.isActive);
+      if (activeVersion) {
+        const versionOption = { label: `${activeVersion.versionId} (Active)`, value: activeVersion.versionId };
+        setSelectedVersion(versionOption);
+      }
+    }
+  }, [versions, selectedVersion]);
+
+  // Set default context when test set, version, or numberOfFiles changes
+  React.useEffect(() => {
+    if (selectedTestSet && selectedVersion) {
+      const testSetName = selectedTestSet.label.split(' - ')[0]; // Extract name without file count
+      const versionId = selectedVersion.value; // Use value instead of label to avoid "(Active)"
+      const testSetData = testSets.find((ts) => ts.id === selectedTestSet.value);
+      const totalFiles = testSetData?.fileCount || 0;
+      const filesToProcess = numberOfFiles.trim() ? parseInt(numberOfFiles.trim(), 10) : totalFiles;
+      const defaultContext = `Test set: ${testSetName} using version (${versionId}) with ${filesToProcess} files`;
+      setContext(defaultContext);
+    }
+  }, [selectedTestSet, selectedVersion, testSets, numberOfFiles]);
 
   const loadTestSets = async () => {
     try {
@@ -68,6 +96,7 @@ const TestRunner = ({ onTestStart, onTestComplete, activeTestRuns }) => {
         testSetId: selectedTestSet.value,
         ...(context && { context }),
         ...(numberOfFiles.trim() && { numberOfFiles: parseInt(numberOfFiles.trim(), 10) }),
+        ...(selectedVersion && { configVersion: selectedVersion.value }),
       };
       console.log('TestRunner: Starting test run with input:', input);
 
@@ -154,6 +183,24 @@ const TestRunner = ({ onTestStart, onTestComplete, activeTestRuns }) => {
             options={testSetOptions}
             placeholder="Choose a test set..."
             empty="No test sets available"
+          />
+        </FormField>
+
+        <FormField
+          label="Configuration Version"
+          description="Select which configuration version to use for processing these test documents"
+        >
+          <Select
+            selectedOption={selectedVersion}
+            onChange={({ detail }) => setSelectedVersion(detail.selectedOption)}
+            options={versions.map((version) => ({
+              label: version.isActive ? `${version.versionId} (Active)` : version.versionId,
+              value: version.versionId,
+              description: version.description,
+            }))}
+            placeholder={versions.length === 0 ? 'Loading versions...' : 'Select configuration version'}
+            disabled={loading || versions.length === 0}
+            loadingText="Loading versions..."
           />
         </FormField>
 
