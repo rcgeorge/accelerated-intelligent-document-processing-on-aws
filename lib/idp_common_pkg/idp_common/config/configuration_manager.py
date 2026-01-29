@@ -163,8 +163,11 @@ class ConfigurationManager:
         """
         try:
             # Build DynamoDB item directly without Pydantic
+            # IMPORTANT: Stringify values to convert floats to strings for DynamoDB
+            # (DynamoDB doesn't accept Python float types, only Decimal or string)
             item = {"Configuration": config_type}
-            item.update(config_dict)
+            stringified = ConfigurationRecord._stringify_values(config_dict)
+            item.update(stringified)
             
             self.table.put_item(Item=item)
             logger.info(f"Saved raw configuration (sparse delta): {config_type}")

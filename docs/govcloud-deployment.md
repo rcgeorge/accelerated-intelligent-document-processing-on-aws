@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GenAI IDP Accelerator now supports deployment to AWS GovCloud regions through a specialized template generation script. This solution addresses two key GovCloud requirements:
+The GenAI IDP Accelerator now supports "headless" deployment to AWS GovCloud regions through a specialized template generation script. This solution addresses two key GovCloud requirements:
 
 1. **ARN Partition Compatibility**: All ARN references use `arn:${AWS::Partition}:` instead of `arn:aws:` to work in both commercial and GovCloud regions
 2. **Service Compatibility**: Removes services not available in GovCloud (AppSync, CloudFront, WAF, Cognito UI components)
@@ -69,7 +69,9 @@ Deploy the generated template to GovCloud using the AWS CloudFormation console (
 # Populate {s3-bucket-govcloud} with the bucket name where you'd like the template to be uploaded
 aws cloudformation deploy \
   --template-file .aws-sam/idp-govcloud.yaml \
-  --stack-name my-idp-govcloud-stack \
+  --s3-bucket <S3BUCKET> \
+  --s3-prefix idp-headless \
+  --stack-name my-idp-headless-stack \
   --region us-gov-west-1 \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
