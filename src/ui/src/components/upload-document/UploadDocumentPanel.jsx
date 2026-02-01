@@ -177,8 +177,6 @@ const UploadDocumentPanel = () => {
               label: version.isActive ? `${version.versionId} (Active)` : version.versionId,
               value: version.versionId,
               description: version.description || undefined,
-              value: version.versionId,
-              description: version.description,
             }))}
             placeholder={versions.length === 0 ? 'Loading versions...' : 'Select configuration version'}
             disabled={isUploading || versions.length === 0}

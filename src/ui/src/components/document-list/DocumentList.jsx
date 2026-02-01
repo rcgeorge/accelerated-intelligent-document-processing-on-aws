@@ -35,6 +35,7 @@ import {
 
 import { getFilterCounterText, TableEmptyState, TableNoMatchState } from '../common/table';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
+import { formatConfigVersionText } from '../test-studio/utils/configVersionUtils';
 
 import '@cloudscape-design/global-styles/index.css';
 
@@ -298,7 +299,13 @@ const DocumentList = () => {
             periodsToLoad={periodsToLoad}
             setPeriodsToLoad={setPeriodsToLoad}
             getDocumentDetailsFromIds={getDocumentDetailsFromIds}
-            downloadToExcel={() => exportToExcel(filteredDocumentList, 'Document-List')}
+            downloadToExcel={() => {
+              const exportData = filteredDocumentList.map((item) => ({
+                ...item,
+                configVersion: formatConfigVersionText(item.configVersion, versions),
+              }));
+              exportToExcel(exportData, 'Document-List');
+            }}
             onReprocess={isReviewer && !isAdmin ? null : () => setIsReprocessModalVisible(true)}
             onDelete={isReviewer && !isAdmin ? null : () => setIsDeleteModalVisible(true)}
             onAbort={isReviewer && !isAdmin ? null : () => setIsAbortModalVisible(true)}

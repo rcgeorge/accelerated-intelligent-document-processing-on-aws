@@ -12,7 +12,7 @@ import { paginationLabels } from '../common/labels';
 import TestRunnerStatus from './TestRunnerStatus';
 import { TableHeader } from '../common/table';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
-import { formatConfigVersionLink } from './utils/configVersionUtils';
+import { formatConfigVersionLink, formatConfigVersionText } from './utils/configVersionUtils';
 
 const client = generateClient();
 
@@ -191,7 +191,7 @@ const TestResultsList = ({ timePeriodHours, setTimePeriodHours, selectedItems, s
       run.testRunId,
       run.testSetName || '',
       run.context || '',
-      run.configVersion || '',
+      formatConfigVersionText(run.configVersion, versions),
       run.status,
       run.filesCount || 0,
       run.createdAt || '',

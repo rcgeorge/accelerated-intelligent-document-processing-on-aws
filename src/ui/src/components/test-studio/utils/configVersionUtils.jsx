@@ -16,7 +16,12 @@ export const formatConfigVersionLink = (configVersion, versions, maxDescLength =
   const versionId = configVersion;
   const versionFromList = versions.find((v) => v.versionId === versionId);
 
-  if (versionFromList?.description) {
+  // If version not found in current versions list, show as deleted
+  if (!versionFromList) {
+    return <span style={{ textDecoration: 'line-through', color: '#687078' }}>{versionId}</span>;
+  }
+
+  if (versionFromList.description) {
     const truncatedDesc =
       versionFromList.description.length > maxDescLength
         ? `${versionFromList.description.substring(0, maxDescLength)}...`
@@ -43,5 +48,10 @@ export const formatConfigVersionText = (configVersion, versions) => {
   const versionId = configVersion;
   const versionFromList = versions.find((v) => v.versionId === versionId);
 
-  return versionFromList?.description ? `${versionId} (${versionFromList.description})` : versionId;
+  // If version not found in current versions list, show as deleted
+  if (!versionFromList) {
+    return `${versionId} (deleted)`;
+  }
+
+  return versionFromList.description ? `${versionId} (${versionFromList.description})` : versionId;
 };

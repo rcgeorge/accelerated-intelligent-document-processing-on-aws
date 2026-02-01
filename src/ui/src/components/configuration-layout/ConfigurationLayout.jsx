@@ -21,10 +21,14 @@ import {
   Icon,
   Badge,
   Table,
+  ExpandableSection,
+  CodeEditor,
 } from '@cloudscape-design/components';
 import Editor from '@monaco-editor/react';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import yaml from 'js-yaml';
+// eslint-disable-next-line import/no-extraneous-dependencies
+import ace from 'ace-builds';
 import ReactMarkdown from 'react-markdown';
 import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
@@ -297,7 +301,7 @@ const ConfigurationLayout = () => {
   const [activatedVersionId, setActivatedVersionId] = useState('');
   const [versionToActivate, setVersionToActivate] = useState('');
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
-  const [showDeleteSuccessModal, setShowDeleteSuccessModal] = useState(false);
+  const [showBulkDeleteSuccessModal, setShowBulkDeleteSuccessModal] = useState(false);
   const [deletedVersionsDisplay, setDeletedVersionsDisplay] = useState('');
   const [exportFormat, setExportFormat] = useState('json');
   const [exportFileName, setExportFileName] = useState('configuration');
@@ -623,7 +627,19 @@ const ConfigurationLayout = () => {
           config = JSON.parse(content);
         }
 
-        setImportedConfigForNewVersion(config);
+        // Merge with v0 defaults to fill missing fields
+        let configToImport = config;
+        if (defaultVersionData && defaultVersionData.configuration) {
+          configToImport = {
+            ...defaultVersionData.configuration,
+            ...config,
+          };
+        }
+
+        setImportedConfigForNewVersion(configToImport);
+        // Set filename as default description
+        const fileName = file.name.replace(/\.(json|yaml|yml)$/i, '');
+        setNewVersionDescription(fileName);
       } catch (error) {
         setSaveError(`Failed to parse ${file.name}: ${error.message}`);
       }
@@ -682,10 +698,6 @@ const ConfigurationLayout = () => {
       for (const versionId of versionsToDelete) {
         await deleteVersion(versionId);
       }
-      await fetchVersions();
-
-      // Clear selection after deletion
-      setSelectedVersionsForCompare([]);
 
       // If the currently selected version was deleted, clear it
       if (selectedVersion && versionsToDelete.includes(selectedVersion)) {
@@ -698,13 +710,15 @@ const ConfigurationLayout = () => {
 
       // Show success confirmation
       setDeletedVersionsDisplay(deletedVersionsWithDesc.join(', '));
-      setShowDeleteSuccessModal(true);
+      setShowBulkDeleteSuccessModal(true);
     } catch (error) {
       console.error('Delete error:', error);
       setSaveError(`Failed to delete versions: ${error.message}`);
     } finally {
       setShowBulkDeleteModal(false);
       setVersionsToDelete([]);
+      // Clear selection after deletion
+      setSelectedVersionsForCompare([]);
     }
   };
 
@@ -896,6 +910,97 @@ const ConfigurationLayout = () => {
   const handleLocalFileImport = () => {
     setShowImportSourceModal(false);
     document.getElementById('import-file').click();
+  };
+
+  // Handler for config library import
+  const handleConfigLibraryImport = async () => {
+    setShowImportSourceModal(false);
+    setLibraryLoading(true);
+
+    try {
+      // Determine pattern based on settings
+      const pattern = settings?.IDPPattern?.includes('Pattern1')
+        ? 'pattern-1'
+        : settings?.IDPPattern?.includes('Pattern3')
+        ? 'pattern-3'
+        : 'pattern-2';
+
+      const configs = await listConfigurations(pattern);
+      setLibraryConfigs(configs);
+      setShowLibraryBrowserModal(true);
+    } catch (error) {
+      setSaveError(`Failed to load configuration library: ${error.message}`);
+    } finally {
+      setLibraryLoading(false);
+    }
+  };
+
+  // Handler for selecting a library configuration for new version
+  const handleLibraryConfigSelect = async (configName) => {
+    setLibraryLoading(true);
+
+    try {
+      // Determine pattern based on settings
+      const pattern = settings?.IDPPattern?.includes('Pattern1')
+        ? 'pattern-1'
+        : settings?.IDPPattern?.includes('Pattern3')
+        ? 'pattern-3'
+        : 'pattern-2';
+
+      const configFile = await getFile(pattern, configName, 'config.yaml');
+
+      if (configFile && configFile.content) {
+        // Parse YAML content
+        const importedConfig = yaml.load(configFile.content);
+
+        if (importedConfig && typeof importedConfig === 'object') {
+          // Merge with v0 defaults to fill in missing fields
+          let configToImport = importedConfig;
+          if (defaultVersionData && defaultVersionData.configuration) {
+            configToImport = {
+              ...defaultVersionData.configuration,
+              ...importedConfig,
+            };
+          }
+
+          setImportedConfigForNewVersion(configToImport);
+          setNewVersionDescription(configName);
+          setShowLibraryBrowserModal(false);
+        } else {
+          setImportError('Invalid configuration file format');
+        }
+      }
+    } catch (error) {
+      setImportError(`Failed to load configuration: ${error.message}`);
+    } finally {
+      setLibraryLoading(false);
+    }
+  };
+
+  // Handler for viewing README
+  const handleViewReadme = async (configName) => {
+    setLibraryLoading(true);
+
+    try {
+      // Determine pattern based on settings
+      const pattern = settings?.IDPPattern?.includes('Pattern1')
+        ? 'pattern-1'
+        : settings?.IDPPattern?.includes('Pattern3')
+        ? 'pattern-3'
+        : 'pattern-2';
+
+      const readmeFile = await getFile(pattern, configName, 'README.md');
+
+      if (readmeFile && readmeFile.content) {
+        setReadmeContent(readmeFile.content);
+        setSelectedLibraryConfig(configName);
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      setSaveError(`Failed to load README: ${error.message}`);
+    } finally {
+      setLibraryLoading(false);
+    }
   };
 
   // Handle reset to default
@@ -1105,7 +1210,17 @@ const ConfigurationLayout = () => {
                     <Button onClick={() => setShowResetModal(true)} disabled={selectedVersion === 'v0'}>
                       Restore default (All)
                     </Button>
-                    <Button onClick={() => setShowSaveAsNewModal(true)}>Save as Version</Button>
+                    <Button
+                      onClick={() => {
+                        const currentVersionData = versions.find((v) => v.versionId === selectedVersion);
+                        const currentDescription = currentVersionData?.description;
+                        const defaultDescription = currentDescription ? `${currentDescription} - Copy` : `${selectedVersion} - Copy`;
+                        setNewVersionDescription(defaultDescription);
+                        setShowSaveAsNewModal(true);
+                      }}
+                    >
+                      Save as Version
+                    </Button>
                     <Button
                       variant={hasUnsavedChanges ? 'primary' : 'normal'}
                       onClick={handleSave}
@@ -1156,10 +1271,7 @@ const ConfigurationLayout = () => {
                     <div>Configuration validation errors:</div>
                     <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
                       {validationErrors.map((error, index) => (
-                        <li
-                          key={`validation-error-${error.message.replace(/[^a-zA-Z0-9]/g, '-')}-${index}`}
-                          style={{ marginBottom: '4px' }}
-                        >
+                        <li key={`validation-error-${selectedVersion || 'unknown'}-${index}`} style={{ marginBottom: '4px' }}>
                           {error.message}
                         </li>
                       ))}
@@ -1311,7 +1423,11 @@ const ConfigurationLayout = () => {
           <Input
             value={newVersionDescription}
             onChange={({ detail }) => setNewVersionDescription(detail.value)}
-            placeholder={`New version based on ${selectedVersion}`}
+            placeholder={(() => {
+              const currentVersionData = versions.find((v) => v.versionId === selectedVersion);
+              const currentDescription = currentVersionData?.description;
+              return currentDescription ? `${currentDescription} - Copy` : `${selectedVersion} - Copy`;
+            })()}
           />
         </FormField>
       </Modal>
@@ -1564,8 +1680,20 @@ const ConfigurationLayout = () => {
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Import Configuration File" description="Select a JSON or YAML configuration file">
-            <Button onClick={() => document.getElementById('import-new-version-file').click()}>Choose File</Button>
+          <FormField label="Import Configuration" description="Choose import source">
+            <SpaceBetween size="m">
+              <Button
+                variant="primary"
+                onClick={() => document.getElementById('import-new-version-file').click()}
+                iconName="upload"
+                fullWidth
+              >
+                Import from Local File
+              </Button>
+              <Button onClick={handleConfigLibraryImport} iconName="folder" fullWidth>
+                Import from Configuration Library
+              </Button>
+            </SpaceBetween>
             <input
               id="import-new-version-file"
               type="file"
@@ -1575,7 +1703,7 @@ const ConfigurationLayout = () => {
             />
             {importedConfigForNewVersion && (
               <Box margin={{ top: 's' }}>
-                <Alert type="success">Configuration file imported successfully!</Alert>
+                <Alert type="success">Configuration imported successfully!</Alert>
               </Box>
             )}
           </FormField>
@@ -1587,18 +1715,118 @@ const ConfigurationLayout = () => {
               placeholder="New imported version"
             />
           </FormField>
+
+          {importedConfigForNewVersion && (
+            <FormField label="Configuration Preview" description="Review the merged configuration before creating the version">
+              <ExpandableSection headerText="View merged configuration" variant="container">
+                <CodeEditor
+                  ace={ace}
+                  language="json"
+                  value={JSON.stringify(importedConfigForNewVersion, null, 2)}
+                  readOnly
+                  preferences={{
+                    fontSize: 12,
+                    showLineNumbers: true,
+                    showGutter: true,
+                  }}
+                  loading={false}
+                />
+              </ExpandableSection>
+            </FormField>
+          )}
         </SpaceBetween>
       </Modal>
 
-      {/* Delete Success Modal */}
+      {/* Configuration Library Browser Modal */}
       <Modal
-        visible={showDeleteSuccessModal}
-        onDismiss={() => setShowDeleteSuccessModal(false)}
+        visible={showLibraryBrowserModal}
+        onDismiss={() => setShowLibraryBrowserModal(false)}
+        size="large"
+        header="Configuration Library"
+        footer={
+          <Box float="right">
+            <Button onClick={() => setShowLibraryBrowserModal(false)}>Cancel</Button>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            <strong>Available Configurations</strong>
+            <br />
+            Select a configuration to import into your current workspace.
+          </Box>
+
+          {libraryLoading ? (
+            <Box textAlign="center">
+              <Spinner size="large" />
+            </Box>
+          ) : (
+            <Table
+              columnDefinitions={[
+                {
+                  id: 'name',
+                  header: 'Configuration Name',
+                  cell: (item) => item.name,
+                  sortingField: 'name',
+                },
+                {
+                  id: 'actions',
+                  header: 'Actions',
+                  cell: (item) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="primary" size="small" onClick={() => handleLibraryConfigSelect(item.name)}>
+                        Import
+                      </Button>
+                      {item.hasReadme && (
+                        <Button size="small" onClick={() => handleViewReadme(item.name)}>
+                          View README
+                        </Button>
+                      )}
+                    </SpaceBetween>
+                  ),
+                },
+              ]}
+              items={libraryConfigs}
+              loadingText="Loading configurations..."
+              empty={
+                <Box textAlign="center" color="inherit">
+                  <b>No configurations available</b>
+                  <Box variant="p" color="inherit">
+                    No configurations found in the library for the current pattern.
+                  </Box>
+                </Box>
+              }
+            />
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      {/* README Modal */}
+      <Modal
+        visible={showReadmeModal}
+        onDismiss={() => setShowReadmeModal(false)}
+        size="large"
+        header={`README - ${selectedLibraryConfig}`}
+        footer={
+          <Box float="right">
+            <Button onClick={() => setShowReadmeModal(false)}>Close</Button>
+          </Box>
+        }
+      >
+        <Box>
+          <ReactMarkdown>{readmeContent}</ReactMarkdown>
+        </Box>
+      </Modal>
+
+      {/* Bulk Delete Success Modal */}
+      <Modal
+        visible={showBulkDeleteSuccessModal}
+        onDismiss={() => setShowBulkDeleteSuccessModal(false)}
         size="medium"
         header="Versions Deleted Successfully"
         footer={
           <Box float="right">
-            <Button variant="primary" onClick={() => setShowDeleteSuccessModal(false)}>
+            <Button variant="primary" onClick={() => setShowBulkDeleteSuccessModal(false)}>
               OK
             </Button>
           </Box>
@@ -1613,7 +1841,6 @@ const ConfigurationLayout = () => {
           <Box>
             <strong>Deleted Versions:</strong> {deletedVersionsDisplay}
           </Box>
-          <Box>The versions have been permanently removed from the system.</Box>
         </SpaceBetween>
       </Modal>
     </>

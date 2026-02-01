@@ -305,7 +305,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                     existing_default = manager.get_configuration("Default")
                     if existing_default:
                         logger.info("Found existing Default - migrating to Config#v0")
-                        manager.save_configuration("Config", existing_default, version="v0", description="System default configuration (v0) - migrated from Default")
+                        manager.save_configuration("Config", existing_default, version="v0", description="System default configuration - migrated from Default")
                         manager.delete_configuration("Default")
                         migrated_default = True
                         logger.info("Migrated Default to Config#v0")
@@ -434,7 +434,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                     version_id = config_name
                     description = f"Configuration {version_id}"
                     if version_id == "v0":
-                        description = "System default configuration (v0)"
+                        description = "System default configuration"
                     elif version_id == "v1":
                         description = "User customized configuration (v1)"
                     

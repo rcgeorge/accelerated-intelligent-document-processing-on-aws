@@ -543,7 +543,7 @@ const TestComparison = ({ preSelectedTestRunIds = [] }) => {
           {
             testSetName: testRun.testSetName,
             context: testRun.context,
-            configVersion: testRun.configVersion,
+            configVersion: formatConfigVersionText(testRun.configVersion, versions),
             filesCount: testRun.filesCount,
             completedFiles: testRun.completedFiles,
             failedFiles: testRun.failedFiles,
