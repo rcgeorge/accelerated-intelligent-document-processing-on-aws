@@ -309,6 +309,9 @@ const ConfigurationLayout = () => {
   const [extractionSchema, setExtractionSchema] = useState(null);
   const [ruleSchema, setRuleSchema] = useState(null);
   const [newVersionDescription, setNewVersionDescription] = useState('');
+  const [showEditDescriptionModal, setShowEditDescriptionModal] = useState(false);
+  const [editingVersionId, setEditingVersionId] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
 
   // Configuration Library state
   const [showImportSourceModal, setShowImportSourceModal] = useState(false);
@@ -638,24 +641,7 @@ const ConfigurationLayout = () => {
         }
 
         // Ensure v0 is loaded for merging
-        let v0Data = defaultVersionData;
-        if (!v0Data) {
-          try {
-            const v0Response = await fetchVersion('v0');
-            if (v0Response && v0Response.configuration) {
-              let v0Config;
-              if (typeof v0Response.configuration === 'string') {
-                v0Config = JSON.parse(v0Response.configuration);
-              } else {
-                v0Config = v0Response.configuration;
-              }
-              v0Data = { ...v0Response, configuration: v0Config };
-              setDefaultVersionData(v0Data);
-            }
-          } catch (error) {
-            console.warn('Could not load v0 for merging:', error);
-          }
-        }
+        const v0Data = await ensureV0Loaded();
 
         // Merge with v0 defaults to fill missing fields
         let configToImport = config;
@@ -689,24 +675,60 @@ const ConfigurationLayout = () => {
     setSaveError(null);
 
     try {
+      await ensureV0Loaded();
       const description = newVersionDescription.trim() || 'New imported version';
       const result = await saveAsNewVersion(importedConfigForNewVersion, description);
       setShowImportAsNewVersionModal(false);
       setImportedConfigForNewVersion(null);
       setNewVersionDescription('');
       setSaveSuccess(true);
-      // Show confirmation dialog
       setShowVersionConfirmationModal(true);
       setConfirmationModalType('import');
-      // Store the new version ID and description for the confirmation dialog
       setNewlyCreatedVersionId(`${result?.versionId || 'Unknown'} (${description})`);
-      // Refresh versions list
       await fetchVersions();
     } catch (error) {
       console.error('Create version error:', error);
       setSaveError(error.message || 'Failed to create version from imported configuration');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Helper function to ensure v0 is loaded
+  const ensureV0Loaded = async () => {
+    if (!defaultVersionData) {
+      const v0Response = await fetchVersion('v0');
+      if (v0Response && v0Response.configuration) {
+        let v0Config;
+        if (typeof v0Response.configuration === 'string') {
+          v0Config = JSON.parse(v0Response.configuration);
+        } else {
+          v0Config = v0Response.configuration;
+        }
+        const v0Data = { ...v0Response, configuration: v0Config };
+        setDefaultVersionData(v0Data);
+        return v0Data;
+      }
+    }
+    return defaultVersionData;
+  };
+
+  // Handle edit description
+  const handleEditDescription = (versionId, currentDescription) => {
+    setEditingVersionId(versionId);
+    setEditingDescription(currentDescription);
+    setShowEditDescriptionModal(true);
+  };
+
+  const confirmEditDescription = async () => {
+    try {
+      // Get the current configuration to preserve it
+      const currentConfig = await fetchVersion(editingVersionId);
+      await updateVersion(editingVersionId, JSON.parse(currentConfig.configuration), editingDescription);
+      setShowEditDescriptionModal(false);
+      await fetchVersions();
+    } catch (error) {
+      setSaveError(`Failed to update description: ${error.message}`);
     }
   };
 
@@ -726,8 +748,11 @@ const ConfigurationLayout = () => {
       });
 
       for (const versionId of versionsToDelete) {
-        await deleteVersion(versionId);
+        await deleteVersion(versionId, true); // Skip refresh for each delete
       }
+
+      // Refresh once after all deletions
+      await fetchVersions();
 
       // If the currently selected version was deleted, clear it
       if (selectedVersion && versionsToDelete.includes(selectedVersion)) {
@@ -914,24 +939,7 @@ const ConfigurationLayout = () => {
 
         if (importedConfig && typeof importedConfig === 'object') {
           // Ensure v0 is loaded for merging
-          let v0Data = defaultVersionData;
-          if (!v0Data) {
-            try {
-              const v0Response = await fetchVersion('v0');
-              if (v0Response && v0Response.configuration) {
-                let v0Config;
-                if (typeof v0Response.configuration === 'string') {
-                  v0Config = JSON.parse(v0Response.configuration);
-                } else {
-                  v0Config = v0Response.configuration;
-                }
-                v0Data = { ...v0Response, configuration: v0Config };
-                setDefaultVersionData(v0Data);
-              }
-            } catch (error) {
-              console.warn('Could not load v0 for merging:', error);
-            }
-          }
+          const v0Data = await ensureV0Loaded();
 
           // Merge with v0 defaults to fill missing fields
           let configToImport = importedConfig;
@@ -1110,11 +1118,14 @@ const ConfigurationLayout = () => {
         const importedConfig = yaml.load(configFile.content);
 
         if (importedConfig && typeof importedConfig === 'object') {
+          // Ensure v0 is loaded for merging
+          const v0Data = await ensureV0Loaded();
+
           // Merge with v0 defaults to fill in missing fields
           let configToImport = importedConfig;
-          if (defaultVersionData && defaultVersionData.configuration) {
+          if (v0Data && v0Data.configuration) {
             configToImport = {
-              ...defaultVersionData.configuration,
+              ...v0Data.configuration,
               ...importedConfig,
             };
           }
@@ -1292,6 +1303,7 @@ const ConfigurationLayout = () => {
             onActivateVersion={handleBulkActivateVersion}
             onDeleteVersions={handleBulkDeleteVersions}
             onImportAsNewVersion={handleImportAsNewVersion}
+            onEditDescription={handleEditDescription}
           />
         </Container>
 
@@ -1831,6 +1843,33 @@ const ConfigurationLayout = () => {
           </Box>
           <Box>This version is now being used for all new document processing.</Box>
         </SpaceBetween>
+      </Modal>
+
+      {/* Edit Description Modal */}
+      <Modal
+        visible={showEditDescriptionModal}
+        onDismiss={() => setShowEditDescriptionModal(false)}
+        header="Edit Version Description"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowEditDescriptionModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={confirmEditDescription}>
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <FormField label="Description">
+          <Input
+            value={editingDescription}
+            onChange={({ detail }) => setEditingDescription(detail.value)}
+            placeholder="Enter version description"
+          />
+        </FormField>
       </Modal>
 
       {/* Import as New Version Modal */}

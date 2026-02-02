@@ -579,7 +579,7 @@ class ConfigurationManager:
             raise
 
     def handle_update_custom_configuration(
-        self, custom_config: Union[str, Dict[str, Any], IDPConfig], version_id: Optional[str] = None
+        self, custom_config: Union[str, Dict[str, Any], IDPConfig], version_id: Optional[str] = None, description: Optional[str] = None
     ) -> bool:
         """
         Handle the updateConfiguration GraphQL mutation.
@@ -659,7 +659,7 @@ class ConfigurationManager:
         merged_config = IDPConfig(**existing_dict)
 
         # Save updated configuration
-        self.save_configuration("Config", merged_config, version=version_id)
+        self.save_configuration("Config", merged_config, version=version_id, description=description)
         logger.info(f"Updated Config version {version_id or 'active'} by merging diff")
 
         return True

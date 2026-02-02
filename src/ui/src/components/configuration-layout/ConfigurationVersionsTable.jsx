@@ -16,6 +16,7 @@ const ConfigurationVersionsTable = ({
   onActivateVersion,
   onDeleteVersions,
   onImportAsNewVersion,
+  onEditDescription,
 }) => {
   // Log the versions data to console for debugging
   console.log('ConfigurationVersionsTable - versions data:', versions);
@@ -98,7 +99,7 @@ const ConfigurationVersionsTable = ({
     pagination: { pageSize: 5 },
     sorting: {
       defaultState: {
-        sortingColumn: columnDefinitions[4], // Sort by updatedAt by default
+        sortingColumn: columnDefinitions[3], // Sort by updatedAt by default
         isDescending: true,
       },
     },
@@ -161,6 +162,15 @@ const ConfigurationVersionsTable = ({
               >
                 Activate
               </Button>
+              <Button
+                onClick={() => {
+                  const selectedVersion = versions.find((v) => v.versionId === selectedVersionsForCompare[0]);
+                  onEditDescription?.(selectedVersionsForCompare[0], selectedVersion?.description || '');
+                }}
+                disabled={selectedVersionsForCompare.length !== 1}
+              >
+                Edit
+              </Button>
               <Button variant="normal" onClick={() => onImportAsNewVersion?.()} iconName="upload">
                 Import as New Version
               </Button>
@@ -205,6 +215,7 @@ ConfigurationVersionsTable.propTypes = {
   onActivateVersion: PropTypes.func,
   onDeleteVersions: PropTypes.func,
   onImportAsNewVersion: PropTypes.func,
+  onEditDescription: PropTypes.func,
 };
 
 export default ConfigurationVersionsTable;

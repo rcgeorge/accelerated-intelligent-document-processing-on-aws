@@ -74,13 +74,14 @@ const useConfigurationVersions = () => {
     }
   };
 
-  const updateVersion = async (versionId, configuration) => {
+  const updateVersion = async (versionId, configuration, description) => {
     try {
       const result = await client.graphql({
         query: updateConfigurationMutation,
         variables: {
           versionId,
           customConfig: JSON.stringify(configuration),
+          description,
         },
       });
       const response = result.data.updateConfiguration;
@@ -144,7 +145,7 @@ const useConfigurationVersions = () => {
     }
   };
 
-  const deleteVersion = async (versionId) => {
+  const deleteVersion = async (versionId, skipRefresh = false) => {
     try {
       const result = await client.graphql({
         query: deleteConfigVersionMutation,
@@ -160,8 +161,10 @@ const useConfigurationVersions = () => {
         throw new Error(response.error?.message || 'Failed to delete version');
       }
 
-      // Refresh versions list after deleting
-      await fetchVersions();
+      // Only refresh if not skipping
+      if (!skipRefresh) {
+        await fetchVersions();
+      }
 
       return response;
     } catch (err) {
