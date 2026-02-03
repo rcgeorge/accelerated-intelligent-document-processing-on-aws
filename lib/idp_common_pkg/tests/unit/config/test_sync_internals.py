@@ -56,8 +56,8 @@ class TestSyncInternals:
 
         # Mock get_configuration calls
         def mock_get_config(config_type, version=None):
-            if config_type == "Config" and version == "v0":
-                return old_v0  # Return old v0 for comparison
+            if config_type == "Config" and version == "default":
+                return old_v0  # Return old default for comparison
             elif config_type == "Config" and version == "v1":
                 return v1_config  # Return v1 to be synced
             return None

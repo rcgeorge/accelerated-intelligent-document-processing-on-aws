@@ -74,7 +74,7 @@ class ConfigurationManager:
 
         Args:
             config_type: Configuration type ("Config", "Schema", "Pricing", or legacy "Default"/"Custom")
-            version: Version identifier for Config type only (v0, v1, v2, etc.). 
+            version: Version identifier for Config type only (default, production-config, test-config, etc.). 
                     If None for Config type, returns active version.
                     Ignored for Schema/Pricing types.
 
@@ -85,12 +85,17 @@ class ConfigurationManager:
             # Handle versioned Config type
             if config_type == "Config":
                 if version:
-                    # For non-v0 versions, merge with v0 baseline for automatic inheritance
-                    if version != "v0":
+                    # Check if version exists first
+                    version_record = self._read_record("Config", version)
+                    if not version_record:
+                        return None
+                    
+                    # For non-default versions, merge with default baseline for automatic inheritance
+                    if version != "default":
                         return self._get_merged_version_config(version)
                     else:
-                        # Get v0 directly
-                        record = self._read_record("Config", version)
+                        # Get default directly
+                        record = version_record
                 else:
                     # Get active version (merging handled in _get_active_config_version)
                     record = self._get_active_config_version()
@@ -237,7 +242,7 @@ class ConfigurationManager:
         Args:
             config_type: Configuration type ("Config", "Schema", "Pricing")
             config: SchemaConfig, IDPConfig, PricingConfig model, or dict
-            version: Version identifier for Config type only (v0, v1, v2, etc.). 
+            version: Version identifier for Config type only (default, production-config, test-config, etc.). 
                     If None for Config type, saves to active version.
                     Ignored for Schema/Pricing types.
             description: Version description
@@ -266,7 +271,7 @@ class ConfigurationManager:
         if config_type == CONFIG_TYPE_DEFAULT:
             config_type = "Config"
             if version is None:
-                version = "v0"
+                version = "default"
         elif config_type == CONFIG_TYPE_CUSTOM:
             config_type = "Config"
             if version is None:
@@ -280,8 +285,8 @@ class ConfigurationManager:
                 if active_record:
                     version = active_record.version
                 else:
-                    # No active version exists, default to v0
-                    version = "v0"
+                    # No active version exists, default to default
+                    version = "default"
             
             # Check if this version already exists to preserve is_active status and metadata
             existing_record = self._read_record("Config", version)
@@ -304,8 +309,8 @@ class ConfigurationManager:
                     "updated_at": timestamp
                 }
             
-            # If updating v0 (baseline), sync all other versions
-            if version == "v0" and not skip_sync and isinstance(config, IDPConfig):
+            # If updating default (baseline), sync all other versions
+            if version == "default" and not skip_sync and isinstance(config, IDPConfig):
                 self._sync_all_versions_with_new_baseline(config)
             
             configuration_type = "Config"
@@ -337,7 +342,7 @@ class ConfigurationManager:
         Activate a specific Config version and deactivate all others.
         
         Args:
-            version: Version to activate (v0, v1, v2, etc.)
+            version: Version to activate (default, production-config, test-config, etc.)
             
         Raises:
             ValueError: If version doesn't exist
@@ -418,7 +423,7 @@ class ConfigurationManager:
 
         Args:
             config_type: Configuration type ("Config", "Schema", "Pricing", or legacy "Default"/"Custom")
-            version: Version identifier for Config type only (v0, v1, v2, etc.). 
+            version: Version identifier for Config type only (default, production-config, test-config, etc.). 
                     Required for Config type, ignored for Schema/Pricing types.
 
         Raises:
@@ -553,7 +558,7 @@ class ConfigurationManager:
             raise
 
     def handle_update_custom_configuration(
-        self, custom_config: Union[str, Dict[str, Any], IDPConfig], version_id: Optional[str] = None, description: Optional[str] = None
+        self, custom_config: Union[str, Dict[str, Any], IDPConfig], version_id: Optional[str] = None, description: Optional[str] = None, version_name: Optional[str] = None
     ) -> bool:
         """
         Handle the updateConfiguration GraphQL mutation.
@@ -566,7 +571,7 @@ class ConfigurationManager:
         
         Args:
             custom_config: Configuration as JSON string, dict, or IDPConfig
-            version_id: Version to update (v0, v1, v2, etc.). If None, updates active version.
+            version_id: Version to update (default, production-config, test-config, etc.). If None, updates active version.
 
         Returns:
             True on success
@@ -592,18 +597,18 @@ class ConfigurationManager:
         # Extract special flags before processing
         reset_to_default = config_dict.pop("resetToDefault", False) if isinstance(config_dict, dict) else False
         
-        # Handle reset to default - copy v0 config to specified version
+        # Handle reset to default - copy default config to specified version
         if reset_to_default:
-            logger.info(f"Resetting version {version_id} to default (v0)")
+            logger.info(f"Resetting version {version_id} to default")
             
-            # Get v0 configuration
-            v0_config = self.get_configuration("Config", "v0")
-            if not v0_config or not isinstance(v0_config, IDPConfig):
-                raise Exception("Cannot reset to default: v0 configuration not found")
+            # Get default configuration
+            default_config = self.get_configuration("Config", "default")
+            if not default_config or not isinstance(default_config, IDPConfig):
+                raise Exception("Cannot reset to default: default configuration not found")
             
-            # Save v0 config to the specified version (no activation change)
-            self.save_configuration("Config", v0_config, version=version_id)
-            logger.info(f"Reset version {version_id} to match v0 default")
+            # Save default config to the specified version (no activation change)
+            self.save_configuration("Config", default_config, version=version_id)
+            logger.info(f"Reset version {version_id} to match default")
             return True
 
         # Additional validation: reject if parsed config is empty dict
@@ -622,9 +627,9 @@ class ConfigurationManager:
         # Get existing configuration to merge with
         existing_config = self.get_configuration("Config", version_id)
         if not existing_config or not isinstance(existing_config, IDPConfig):
-            # Fallback: If version doesn't exist, use v0 as base
-            logger.warning(f"Version {version_id} not found, using v0 as base")
-            existing_config = self.get_configuration("Config", "v0") or IDPConfig()
+            # Fallback: If version doesn't exist, use default as base
+            logger.warning(f"Version {version_id} not found, using default as base")
+            existing_config = self.get_configuration("Config", "default") or IDPConfig()
 
         # Apply the diff to existing config (deep update to handle nested objects)
         existing_dict = existing_config.model_dump(mode="python")
@@ -632,8 +637,31 @@ class ConfigurationManager:
         deep_update(existing_dict, update_dict)
         merged_config = IDPConfig(**existing_dict)
 
-        # Save updated configuration
-        self.save_configuration("Config", merged_config, version=version_id, description=description)
+        # Handle version name changes - recalculate version ID
+        if version_name:
+            from idp_common.config.merge_utils import slugify
+            new_version_id = slugify(version_name)
+            
+            # If version ID changed, we need to create new version and delete old one
+            if new_version_id != version_id:
+                logger.info(f"Version name changed: moving from {version_id} to {new_version_id}")
+                
+                # Check if new version ID already exists
+                existing_new_version = self.get_configuration("Config", new_version_id)
+                if existing_new_version:
+                    raise Exception(f"Cannot rename: version '{new_version_id}' already exists")
+                
+                # Save to new version ID
+                self.save_configuration("Config", merged_config, version=new_version_id, description=description, version_name=version_name)
+                
+                # Delete old version
+                self.delete_configuration("Config", version_id)
+                
+                logger.info(f"Successfully moved version from {version_id} to {new_version_id}")
+                return True
+        
+        # Save updated configuration (same version ID)
+        self.save_configuration("Config", merged_config, version=version_id, description=description, version_name=version_name)
         logger.info(f"Updated Config version {version_id or 'active'} by merging diff")
 
         return True
@@ -642,22 +670,22 @@ class ConfigurationManager:
 
     def _sync_all_versions_with_new_baseline(self, new_baseline: IDPConfig) -> None:
         """
-        Sync all Config versions (v1, v2, v3, ...) with new v0 baseline.
+        Sync all Config versions with new default baseline.
         
-        For each version > v0:
-        1. Get old v0 and the version config
-        2. Calculate what the user customized (diff between version and old v0)
+        For each version > default:
+        1. Get old default and the version config
+        2. Calculate what the user customized (diff between version and old default)
         3. Apply those customizations to new baseline
         4. Save the synced version
         
         Args:
-            new_baseline: The new v0 configuration
+            new_baseline: The new default configuration
         """
         try:
-            # Get old v0 for comparison
-            old_baseline = self.get_configuration("Config", "v0")
+            # Get old default for comparison
+            old_baseline = self.get_configuration("Config", "default")
             if not old_baseline or not isinstance(old_baseline, IDPConfig):
-                logger.info("No existing v0 to sync from")
+                logger.info("No existing default to sync from")
                 return
             
             # Query all Config versions
@@ -666,14 +694,14 @@ class ConfigurationManager:
                 ExpressionAttributeValues={":config_prefix": "Config#"}
             )
             
-            # Sync each version > v0
+            # Sync each version > default
             for item in response.get('Items', []):
                 version = item.get('Version', '')
-                if version and version != "v0":
+                if version and version != "default":
                     # Get the current version config
                     current_version = self.get_configuration("Config", version)
                     if current_version and isinstance(current_version, IDPConfig):
-                        logger.info(f"Syncing version {version} with new v0 baseline")
+                        logger.info(f"Syncing version {version} with new default baseline")
                         
                         # Calculate user customizations and apply to new baseline
                         synced_config = self.sync_custom_with_new_default(
@@ -695,7 +723,7 @@ class ConfigurationManager:
     def _get_active_config_version(self) -> Optional[ConfigurationRecord]:
         """
         Get the active Config version (where is_active=True).
-        For non-v0 active versions, merges with v0 baseline for automatic inheritance.
+        For non-default active versions, merges with default baseline for automatic inheritance.
         
         Returns:
             ConfigurationRecord with is_active=True, or None if not found
@@ -721,8 +749,8 @@ class ConfigurationManager:
             # Get the first active version found
             active_record = ConfigurationRecord.from_dynamodb_item(items[0])
             
-            # If active version is not v0, merge with v0 baseline
-            if active_record.version != "v0":
+            # If active version is not default, merge with default baseline
+            if active_record.version != "default":
                 merged_config = self._get_merged_version_config(active_record.version)
                 if merged_config:
                     # Return record with merged config
@@ -736,19 +764,19 @@ class ConfigurationManager:
 
     def _get_merged_version_config(self, version: str) -> Optional[IDPConfig]:
         """
-        Get version config merged with v0 baseline for automatic inheritance.
+        Get version config merged with default baseline for automatic inheritance.
         
         Args:
-            version: Version identifier (v1, v2, etc.)
+            version: Version identifier (production-config, test-config, etc.)
             
         Returns:
-            Merged IDPConfig with v0 baseline + version customizations, or None if not found
+            Merged IDPConfig with default baseline + version customizations, or None if not found
         """
         try:
-            # Get v0 baseline
-            v0_record = self._read_record("Config", "v0")
-            if not v0_record:
-                logger.warning("No v0 baseline found for merging")
+            # Get default baseline
+            default_record = self._read_record("Config", "default")
+            if not default_record:
+                logger.warning("No default baseline found for merging")
                 # Fallback to version config only
                 version_record = self._read_record("Config", version)
                 return version_record.config if version_record else None
@@ -756,22 +784,22 @@ class ConfigurationManager:
             # Get version config
             version_record = self._read_record("Config", version)
             if not version_record:
-                logger.info(f"Version {version} not found, returning v0 baseline")
-                return v0_record.config
+                logger.info(f"Version {version} not found, returning default baseline")
+                return default_record.config
             
-            # Merge v0 baseline with version customizations
+            # Merge default baseline with version customizations
             from copy import deepcopy
-            v0_dict = v0_record.config.model_dump(mode="python")
+            default_dict = default_record.config.model_dump(mode="python")
             version_dict = version_record.config.model_dump(mode="python")
             
-            # Start with v0 baseline and apply version customizations
-            merged_dict = deepcopy(v0_dict)
+            # Start with default baseline and apply version customizations
+            merged_dict = deepcopy(default_dict)
             deep_update(merged_dict, version_dict)
             
             return IDPConfig(**merged_dict)
             
         except ClientError as e:
-            logger.error(f"Error merging version {version} with v0: {e}")
+            logger.error(f"Error merging version {version} with default: {e}")
             raise
 
     def _read_record(self, configuration_type: str, version: str = "") -> Optional[ConfigurationRecord]:
@@ -780,7 +808,7 @@ class ConfigurationManager:
 
         Args:
             configuration_type: Configuration type (Config, Schema, Pricing)
-            version: Version identifier for Config type (v0, v1, v2, ...) or "" for Schema/Pricing
+            version: Version identifier for Config type (default, production-config, test-config, ...) or "" for Schema/Pricing
 
         Returns:
             ConfigurationRecord or None if not found

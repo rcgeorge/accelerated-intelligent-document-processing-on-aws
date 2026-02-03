@@ -14,6 +14,19 @@ def test_get_configuration_calls_merge_for_non_v0():
     config_manager = ConfigurationManager("test-table")
     config_manager.table = mock_table
 
+    # Mock the DynamoDB response properly
+    mock_table.get_item.return_value = {
+        'Item': {
+            'Configuration': 'Config#v1',
+            'VersionName': 'test-version',
+            'IsActive': False,
+            'Description': 'Test description',
+            'Config': {'notes': 'test-config'},
+            'CreatedAt': '2024-01-01T00:00:00Z',
+            'UpdatedAt': '2024-01-01T00:00:00Z'
+        }
+    }
+
     # Mock the merge method to track if it's called
     merge_called = []
 
@@ -34,21 +47,21 @@ def test_get_configuration_calls_merge_for_non_v0():
 
 @pytest.mark.unit
 def test_get_configuration_v0_no_merge():
-    """Test that get_configuration doesn't merge for v0."""
+    """Test that get_configuration doesn't merge for default."""
     mock_table = Mock()
     config_manager = ConfigurationManager("test-table")
     config_manager.table = mock_table
 
-    # Create v0 config
-    v0_config = IDPConfig(notes="v0 direct")
+    # Create default config
+    default_config = IDPConfig(notes="default direct")
 
     # Mock _read_record
     def mock_read_record(config_type, version):
-        if config_type == "Config" and version == "v0":
+        if config_type == "Config" and version == "default":
             return ConfigurationRecord(
                 configuration_type="Config",
-                version="v0",
-                config=v0_config,
+                version="default",
+                config=default_config,
                 is_active=True,
             )
         return None
@@ -64,12 +77,12 @@ def test_get_configuration_v0_no_merge():
 
     config_manager._get_merged_version_config = mock_merge
 
-    # Get v0 configuration - should NOT call merge
-    result = config_manager.get_configuration("Config", "v0")
+    # Get default configuration - should NOT call merge
+    result = config_manager.get_configuration("Config", "default")
 
-    # Verify merge was NOT called and v0 returned directly
+    # Verify merge was NOT called and default returned directly
     assert len(merge_called) == 0
-    assert result.notes == "v0 direct"
+    assert result.notes == "default direct"
 
 
 @pytest.mark.unit

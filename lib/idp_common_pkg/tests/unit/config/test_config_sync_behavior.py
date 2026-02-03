@@ -51,8 +51,8 @@ class TestConfigSyncBehavior:
         with patch.object(
             config_manager, "_sync_all_versions_with_new_baseline"
         ) as mock_sync:
-            # Save v0 - this should call the sync method
-            config_manager.save_configuration("Config", v0_config, version="v0")
+            # Save default - this should call the sync method
+            config_manager.save_configuration("Config", v0_config, version="default")
 
             # Verify sync was called with the v0 config
             mock_sync.assert_called_once_with(v0_config)
@@ -115,15 +115,15 @@ class TestConfigSyncBehavior:
         with patch.object(
             config_manager, "_sync_all_versions_with_new_baseline"
         ) as mock_sync:
-            # Save v0 exactly like the Lambda does (with metadata)
+            # Save default exactly like the Lambda does (with metadata)
             current_time = datetime.utcnow().isoformat() + "Z"
             metadata = {"updated_at": current_time}
 
             config_manager.save_configuration(
                 "Config",
                 v0_config,
-                version="v0",
-                description="System default configuration (v0)",
+                version="default",
+                description="System default configuration",
                 metadata=metadata,
             )
 

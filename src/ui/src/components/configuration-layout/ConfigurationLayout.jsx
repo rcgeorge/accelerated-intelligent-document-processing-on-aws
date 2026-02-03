@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useLocation } from 'react-router-dom';
 import {
@@ -32,12 +32,13 @@ import ace from 'ace-builds';
 import ReactMarkdown from 'react-markdown';
 import { generateClient } from 'aws-amplify/api';
 import { ConsoleLogger } from 'aws-amplify/utils';
+import { deepMerge } from '../../utils/configUtils';
+import useConfiguration from '../../hooks/use-configuration';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import useConfigurationLibrary from '../../hooks/use-configuration-library';
 import useSettingsContext from '../../contexts/settings';
 import ConfigBuilder from './ConfigBuilder';
 import ConfigurationVersionsTable from './ConfigurationVersionsTable';
-import { deepMerge } from '../../utils/configUtils';
 import syncBdaIdpMutation from '../../graphql/queries/syncBdaIdp';
 import getConfigVersionQuery from '../../graphql/queries/getConfigVersion';
 
@@ -287,7 +288,6 @@ const ConfigurationLayout = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState(null);
-  const [importSuccess, setImportSuccess] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [viewMode, setViewMode] = useState('form');
   const [showResetModal, setShowResetModal] = useState(false);
@@ -313,6 +313,8 @@ const ConfigurationLayout = () => {
   const [showEditDescriptionModal, setShowEditDescriptionModal] = useState(false);
   const [editingVersionId, setEditingVersionId] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
+  const [editingVersionName, setEditingVersionName] = useState('');
+  const [editingError, setEditingError] = useState(null);
 
   // Configuration Library state
   const [showImportSourceModal, setShowImportSourceModal] = useState(false);
@@ -341,6 +343,10 @@ const ConfigurationLayout = () => {
 
   // Helper function to check if Pattern-2 is selected (for Rule Schema feature)
   const isPattern2 = settings?.IDPPattern?.includes('Pattern2');
+
+  // Validation functions
+  const validateVersionName = (name) => /^[a-zA-Z0-9-_]+$/.test(name);
+  const validateDescription = (desc) => /^[a-zA-Z0-9\s-_:]*$/.test(desc);
 
   // Validate the current content based on view mode
   const validateCurrentContent = () => {
@@ -374,7 +380,7 @@ const ConfigurationLayout = () => {
   };
 
   // Handle form value changes and sync with editors
-  const handleFormChange = (newValues) => {
+  const handleFormChange = useCallback((newValues) => {
     setFormValues(newValues);
     try {
       const jsonString = JSON.stringify(newValues, null, 2);
@@ -384,7 +390,7 @@ const ConfigurationLayout = () => {
     } catch (e) {
       console.error('Error converting form values:', e);
     }
-  };
+  }, []);
 
   // Create merged config (same pattern as develop branch)
   const mergedConfig = useMemo(() => {
@@ -575,6 +581,13 @@ const ConfigurationLayout = () => {
           handleVersionSelect(versionParam);
         }
       }
+    } else if (versions.length > 0 && !selectedVersion) {
+      // Auto-open active version when no URL parameter is provided
+      const activeVersion = versions.find((v) => v.isActive);
+      if (activeVersion) {
+        console.log('Auto-opening active version:', activeVersion.versionId);
+        handleVersionSelect(activeVersion.versionId);
+      }
     }
   }, [versions]);
 
@@ -713,22 +726,43 @@ const ConfigurationLayout = () => {
     return defaultVersionData;
   };
 
-  // Handle edit description
-  const handleEditDescription = (versionId, currentDescription) => {
-    setEditingVersionId(versionId);
-    setEditingDescription(currentDescription);
+  // Handle edit version
+  const handleEditVersion = (selectedVersion) => {
+    const versionToEdit = versions.find((v) => v.versionId === selectedVersion.versionId);
+    setEditingVersionId(selectedVersion.versionId);
+    setEditingDescription('');
+    setEditingVersionName(selectedVersion.versionName || selectedVersion.versionId);
+    setEditingError(null); // Clear any previous errors
     setShowEditDescriptionModal(true);
   };
 
   const confirmEditDescription = async () => {
     try {
+      setEditingError(null); // Clear any previous errors
+
+      // Console log what's in memory when user updates version
+      console.log('=== UPDATE VERSION DEBUG ===');
+      console.log('editingVersionId:', editingVersionId);
+      console.log('editingVersionName:', editingVersionName);
+      console.log('editingDescription:', editingDescription);
+      console.log('Current versions in memory:', versions);
+      console.log(
+        'Selected version being edited:',
+        versions.find((v) => v.versionId === editingVersionId),
+      );
+      console.log('===============================');
+
       // Get the current configuration to preserve it
       const currentConfig = await fetchVersion(editingVersionId);
-      await updateVersion(editingVersionId, JSON.parse(currentConfig.configuration), editingDescription);
+      const configData = JSON.parse(currentConfig.configuration);
+
+      await updateVersion(editingVersionId, configData, editingDescription, editingVersionName);
       setShowEditDescriptionModal(false);
       await fetchVersions();
     } catch (error) {
-      setSaveError(`Failed to update description: ${error.message}`);
+      console.error('Edit version error:', error);
+      setEditingError(error.message);
+      // Don't close the modal on error so user can see the error and try again
     }
   };
 
@@ -808,6 +842,7 @@ const ConfigurationLayout = () => {
     try {
       await updateVersion(selectedVersion, formValues);
       setSaveSuccess(true);
+      await fetchVersions(); // Refresh the versions table
     } catch (error) {
       console.error('Save error:', error);
       setSaveError(error.message || 'Failed to save configuration');
@@ -956,7 +991,6 @@ const ConfigurationLayout = () => {
           if (configToImport.rule_classes) {
             setRuleSchema(configToImport.rule_classes);
           }
-          setImportSuccess(true);
         } else {
           setImportError('Invalid configuration file format');
         }
@@ -1066,13 +1100,10 @@ const ConfigurationLayout = () => {
             }
           }
 
-          // Merge with default defaults to fill missing fields
+          // Merge with default defaults to fill missing fields (deep merge)
           let configToImport = importedConfig;
           if (defaultData && defaultData.configuration) {
-            configToImport = {
-              ...defaultData.configuration,
-              ...importedConfig,
-            };
+            configToImport = deepMerge(defaultData.configuration, importedConfig);
           }
 
           setFormValues(configToImport);
@@ -1084,7 +1115,6 @@ const ConfigurationLayout = () => {
           if (configToImport.rule_classes) {
             setRuleSchema(configToImport.rule_classes);
           }
-          setImportSuccess(true);
         } else {
           setImportError('Invalid configuration file format');
         }
@@ -1118,13 +1148,10 @@ const ConfigurationLayout = () => {
           // Ensure default is loaded for merging
           const defaultData = await ensureDefaultLoaded();
 
-          // Merge with default defaults to fill in missing fields
+          // Merge with default defaults to fill in missing fields (deep merge)
           let configToImport = importedConfig;
           if (defaultData && defaultData.configuration) {
-            configToImport = {
-              ...defaultData.configuration,
-              ...importedConfig,
-            };
+            configToImport = deepMerge(defaultData.configuration, importedConfig);
           }
 
           setImportedConfigForNewVersion(configToImport);
@@ -1288,21 +1315,24 @@ const ConfigurationLayout = () => {
   return (
     <>
       <SpaceBetween size="l">
-        {/* Versions Table */}
-        <Container header={<Header variant="h2">Configuration Versions</Header>}>
-          <ConfigurationVersionsTable
-            versions={versions}
-            loading={versionsLoading}
-            onVersionSelect={handleVersionSelect}
-            selectedVersionsForCompare={selectedVersionsForCompare}
-            onVersionSelectForCompare={handleVersionSelectForCompare}
-            onCompareVersions={handleCompareVersions}
-            onActivateVersion={handleBulkActivateVersion}
-            onDeleteVersions={handleBulkDeleteVersions}
-            onImportAsNewVersion={handleImportAsNewVersion}
-            onEditDescription={handleEditDescription}
-          />
-        </Container>
+        {/* Versions Table - Collapsed by default */}
+        <ExpandableSection headerText="Configuration Versions" defaultExpanded={false}>
+          <Container>
+            <ConfigurationVersionsTable
+              versions={versions}
+              loading={versionsLoading}
+              onVersionSelect={handleVersionSelect}
+              selectedVersionsForCompare={selectedVersionsForCompare}
+              currentlyOpenVersion={selectedVersion}
+              onVersionSelectForCompare={handleVersionSelectForCompare}
+              onCompareVersions={handleCompareVersions}
+              onActivateVersion={handleBulkActivateVersion}
+              onDeleteVersions={handleBulkDeleteVersions}
+              onImportAsNewVersion={handleImportAsNewVersion}
+              onEditVersion={handleEditVersion}
+            />
+          </Container>
+        </ExpandableSection>
 
         {/* Loading state for selected version */}
         {loadingVersion && (
@@ -1399,7 +1429,12 @@ const ConfigurationLayout = () => {
                   </SpaceBetween>
                 }
               >
-                Configuration Version ({selectedVersion}
+                Configuration Version (
+                {(() => {
+                  const currentVersionData = versions.find((v) => v.versionId === selectedVersion);
+                  return currentVersionData?.versionName || selectedVersion;
+                })()}
+                )
               </Header>
             }
           >
@@ -1434,7 +1469,10 @@ const ConfigurationLayout = () => {
                     <div>Configuration validation errors:</div>
                     <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
                       {validationErrors.map((error, index) => (
-                        <li key={`validation-error-${selectedVersion || 'unknown'}-${index}`} style={{ marginBottom: '4px' }}>
+                        <li
+                          key={`validation-error-${error.field || 'unknown'}-${error.message.slice(0, 20)}-${index}`}
+                          style={{ marginBottom: '4px' }}
+                        >
                           {error.message}
                         </li>
                       ))}
@@ -1832,31 +1870,70 @@ const ConfigurationLayout = () => {
         </SpaceBetween>
       </Modal>
 
-      {/* Edit Description Modal */}
+      {/* Edit Version Modal */}
       <Modal
         visible={showEditDescriptionModal}
         onDismiss={() => setShowEditDescriptionModal(false)}
-        header="Edit Version Description"
+        header="Edit Version"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowEditDescriptionModal(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={confirmEditDescription}>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  console.log('Save button clicked in edit modal');
+                  confirmEditDescription();
+                }}
+              >
                 Save
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <FormField label="Description">
-          <Input
-            value={editingDescription}
-            onChange={({ detail }) => setEditingDescription(detail.value)}
-            placeholder="Enter version description"
-          />
-        </FormField>
+        <SpaceBetween size="m">
+          {editingError && (
+            <Alert type="error" dismissible onDismiss={() => setEditingError(null)}>
+              {editingError}
+            </Alert>
+          )}
+          <FormField
+            label="Version Name"
+            errorText={
+              editingVersionName && !validateVersionName(editingVersionName)
+                ? 'Version name can only contain letters, numbers, hyphens, and underscores'
+                : ''
+            }
+          >
+            <Input
+              value={editingVersionName}
+              onChange={({ detail }) => {
+                console.log('Version name changed to:', detail.value);
+                setEditingVersionName(detail.value);
+              }}
+              placeholder="Enter version name"
+              invalid={editingVersionName && !validateVersionName(editingVersionName)}
+            />
+          </FormField>
+          <FormField
+            label="Description"
+            errorText={
+              editingDescription && !validateDescription(editingDescription)
+                ? 'Description can only contain letters, numbers, spaces, hyphens, underscores, and colons'
+                : ''
+            }
+          >
+            <Input
+              value={editingDescription}
+              onChange={({ detail }) => setEditingDescription(detail.value)}
+              placeholder="Enter version description"
+              invalid={editingDescription && !validateDescription(editingDescription)}
+            />
+          </FormField>
+        </SpaceBetween>
       </Modal>
 
       {/* Import as New Version Modal */}
@@ -1883,7 +1960,16 @@ const ConfigurationLayout = () => {
               >
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleCreateVersionFromImport} loading={isSaving} disabled={!importedConfigForNewVersion}>
+              <Button
+                variant="primary"
+                onClick={handleCreateVersionFromImport}
+                loading={isSaving}
+                disabled={
+                  !importedConfigForNewVersion ||
+                  !validateVersionName(newVersionName) ||
+                  (newVersionDescription && !validateDescription(newVersionDescription))
+                }
+              >
                 Create Version
               </Button>
             </SpaceBetween>
@@ -1912,43 +1998,42 @@ const ConfigurationLayout = () => {
               style={{ display: 'none' }}
               onChange={handleImportFileForNewVersion}
             />
-            {importedConfigForNewVersion && (
-              <Box margin={{ top: 's' }}>
-                <Alert type="success">Configuration imported successfully!</Alert>
-              </Box>
-            )}
+            {/* Remove premature success banner */}
           </FormField>
 
-          <FormField label="Version Name" description="Enter a name for this configuration version">
-            <Input value={newVersionName} onChange={({ detail }) => setNewVersionName(detail.value)} placeholder="Version name" />
+          <FormField
+            label="Version Name"
+            errorText={
+              newVersionName && !validateVersionName(newVersionName)
+                ? 'Version name can only contain letters, numbers, hyphens, and underscores'
+                : ''
+            }
+          >
+            <Input
+              value={newVersionName}
+              onChange={({ detail }) => setNewVersionName(detail.value)}
+              placeholder="Version name"
+              invalid={newVersionName && !validateVersionName(newVersionName)}
+            />
           </FormField>
 
-          <FormField label="Version Description (Optional)" description="Provide additional details about this version">
+          <FormField
+            label="Version Description (Optional)"
+            errorText={
+              newVersionDescription && !validateDescription(newVersionDescription)
+                ? 'Description can only contain letters, numbers, spaces, hyphens, underscores, and colons'
+                : ''
+            }
+          >
             <Input
               value={newVersionDescription}
               onChange={({ detail }) => setNewVersionDescription(detail.value)}
               placeholder="Optional description"
+              invalid={newVersionDescription && !validateDescription(newVersionDescription)}
             />
           </FormField>
 
-          {importedConfigForNewVersion && (
-            <FormField label="Configuration Preview" description="Review the merged configuration before creating the version">
-              <ExpandableSection headerText="View merged configuration" variant="container">
-                <CodeEditor
-                  ace={ace}
-                  language="json"
-                  value={JSON.stringify(importedConfigForNewVersion, null, 2)}
-                  readOnly
-                  preferences={{
-                    fontSize: 12,
-                    showLineNumbers: true,
-                    showGutter: true,
-                  }}
-                  loading={false}
-                />
-              </ExpandableSection>
-            </FormField>
-          )}
+          {/* Remove JSON merged configuration preview */}
         </SpaceBetween>
       </Modal>
 

@@ -66,7 +66,8 @@ def handler(event, context):
             version_id = args.get("versionId")
             custom_config = args.get("customConfig")
             description = args.get("description")
-            return handle_update_configuration(manager, version_id, custom_config, description)
+            version_name = args.get("versionName")
+            return handle_update_configuration(manager, version_id, custom_config, description, version_name)
         elif operation == "setActiveVersion":
             args = event["arguments"]
             version_id = args.get("versionId")
@@ -650,7 +651,7 @@ def handle_get_config_version(manager, version_id):
         }
 
 
-def handle_update_configuration(manager, version_id, custom_config, description=None):
+def handle_update_configuration(manager, version_id, custom_config, description=None, version_name=None):
     """
     Handle the updateConfiguration GraphQL mutation
     Updates a specific configuration version
@@ -666,7 +667,7 @@ def handle_update_configuration(manager, version_id, custom_config, description=
             }
         
         # Update the specific version
-        success = manager.handle_update_custom_configuration(custom_config, version_id, description)
+        success = manager.handle_update_custom_configuration(custom_config, version_id, description, version_name)
         
         return {
             "success": success,

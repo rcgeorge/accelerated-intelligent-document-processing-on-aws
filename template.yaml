@@ -1763,6 +1763,7 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "x-amz-meta-config-version"
             AllowedMethods:
               - PUT
               - POST

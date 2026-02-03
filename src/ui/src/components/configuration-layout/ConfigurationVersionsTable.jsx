@@ -11,12 +11,13 @@ const ConfigurationVersionsTable = ({
   loading = false,
   onVersionSelect,
   selectedVersionsForCompare = [],
+  currentlyOpenVersion = null, // Currently opened version in the editor
   onVersionSelectForCompare,
   onCompareVersions,
   onActivateVersion,
   onDeleteVersions,
   onImportAsNewVersion,
-  onEditDescription,
+  onEditVersion,
 }) => {
   // Log the versions data to console for debugging
   console.log('ConfigurationVersionsTable - versions data:', versions);
@@ -68,9 +69,7 @@ const ConfigurationVersionsTable = ({
             onVersionSelect?.(item.versionId);
           }}
         >
-          <Box fontWeight={item.isActive ? 'bold' : 'normal'} color={item.isActive ? 'text-status-success' : 'inherit'}>
-            {item.versionId}
-          </Box>
+          {item.versionId}
         </Link>
       ),
       sortingField: 'versionId',
@@ -79,9 +78,12 @@ const ConfigurationVersionsTable = ({
       id: 'versionName',
       header: 'Version Name',
       cell: (item) => (
-        <Box fontWeight={item.isActive ? 'bold' : 'normal'} color={item.isActive ? 'text-status-success' : 'inherit'}>
+        <Box
+          fontWeight={item.isActive || item.versionId === currentlyOpenVersion ? 'bold' : 'normal'}
+          color={item.isActive ? 'text-status-success' : item.versionId === currentlyOpenVersion ? 'text-status-info' : 'inherit'}
+        >
           {item.versionName || item.versionId}
-          {item.isActive ? ' (Active)' : ''}
+          {item.isActive && ' (Active)'}
         </Box>
       ),
       sortingField: 'versionName',
@@ -175,14 +177,14 @@ const ConfigurationVersionsTable = ({
               <Button
                 onClick={() => {
                   const selectedVersion = versions.find((v) => v.versionId === selectedVersionsForCompare[0]);
-                  onEditDescription?.(selectedVersionsForCompare[0], selectedVersion?.description || '');
+                  onEditVersion?.(selectedVersion);
                 }}
                 disabled={selectedVersionsForCompare.length !== 1}
               >
-                Edit
+                Edit Version
               </Button>
               <Button variant="normal" onClick={() => onImportAsNewVersion?.()} iconName="upload">
-                Import as New Version
+                Import
               </Button>
               <Button
                 variant="primary"
@@ -223,12 +225,13 @@ ConfigurationVersionsTable.propTypes = {
   loading: PropTypes.bool,
   onVersionSelect: PropTypes.func,
   selectedVersionsForCompare: PropTypes.arrayOf(PropTypes.string),
+  currentlyOpenVersion: PropTypes.string,
   onVersionSelectForCompare: PropTypes.func,
   onCompareVersions: PropTypes.func,
   onActivateVersion: PropTypes.func,
   onDeleteVersions: PropTypes.func,
   onImportAsNewVersion: PropTypes.func,
-  onEditDescription: PropTypes.func,
+  onEditVersion: PropTypes.func,
 };
 
 export default ConfigurationVersionsTable;

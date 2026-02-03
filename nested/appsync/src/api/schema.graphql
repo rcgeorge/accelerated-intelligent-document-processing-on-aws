@@ -512,7 +512,7 @@ type Mutation {
   # Atomic section-level update for parallel Map operations (extraction/assessment)
   updateDocumentSection(input: UpdateDocumentSectionInput!): Document @aws_iam
   deleteDocument(objectKeys: [String!]!): Boolean! @aws_cognito_user_pools
-  updateConfiguration(versionId: String!, customConfig: AWSJSON!, description: String): UpdateConfigurationResponse
+  updateConfiguration(versionId: String!, customConfig: AWSJSON!, description: String, versionName: String): UpdateConfigurationResponse
   setActiveVersion(versionId: String!): UpdateConfigurationResponse
   saveAsNewVersion(configuration: AWSJSON!, versionName: String!, description: String): UpdateConfigurationResponse
     @aws_cognito_user_pools

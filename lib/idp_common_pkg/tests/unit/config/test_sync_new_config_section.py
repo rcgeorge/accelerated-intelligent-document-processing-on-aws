@@ -29,7 +29,7 @@ def test_sync_called_when_v0_saved_with_new_section():
     with patch.object(
         config_manager, "_sync_all_versions_with_new_baseline"
     ) as mock_sync:
-        config_manager.save_configuration("Config", new_v0_config, "v0")
+        config_manager.save_configuration("Config", new_v0_config, "default")
 
     # Verify sync was called with the new config
     mock_sync.assert_called_once_with(new_v0_config)
@@ -73,7 +73,7 @@ def test_sync_behavior_confirmed():
         config_manager, "_sync_all_versions_with_new_baseline"
     ) as mock_sync:
         mock_table.get_item.return_value = {"Item": None}
-        config_manager.save_configuration("Config", v0_config, "v0")
+        config_manager.save_configuration("Config", v0_config, "default")
 
         # Confirm sync is called - this validates our investigation findings
         mock_sync.assert_called_once()
