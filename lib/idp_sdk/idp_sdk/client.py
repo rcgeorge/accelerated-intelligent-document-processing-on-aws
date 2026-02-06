@@ -87,6 +87,23 @@ class IDPClient:
         self._region = region
         self._resources_cache: Optional[Dict[str, str]] = None
 
+        # Initialize operation namespaces
+        from idp_sdk.operations import (
+            BatchOperation,
+            ConfigOperation,
+            DocumentOperation,
+            ManifestOperation,
+            StackOperation,
+            TestingOperation,
+        )
+
+        self.stack = StackOperation(self)
+        self.batch = BatchOperation(self)
+        self.document = DocumentOperation(self)
+        self.config = ConfigOperation(self)
+        self.manifest = ManifestOperation(self)
+        self.testing = TestingOperation(self)
+
     @property
     def stack_name(self) -> Optional[str]:
         """Current default stack name."""
@@ -126,7 +143,7 @@ class IDPClient:
 
     def _get_stack_resources(self, stack_name: Optional[str] = None) -> Dict[str, str]:
         """Get stack resources with caching."""
-        from idp_cli.stack_info import StackInfo
+        from idp_sdk.core.stack_info import StackInfo
 
         name = self._require_stack(stack_name)
 
@@ -195,7 +212,7 @@ class IDPClient:
             IDPConfigurationError: If required parameters missing
             IDPStackError: If deployment fails
         """
-        from idp_cli.deployer import StackDeployer, build_parameters
+        from idp_sdk.core.stack import StackDeployer, build_parameters
 
         name = self._require_stack(stack_name)
 
@@ -308,7 +325,7 @@ class IDPClient:
         Returns:
             DeletionResult with status
         """
-        from idp_cli.deployer import StackDeployer
+        from idp_sdk.core.stack import StackDeployer
 
         name = self._require_stack(stack_name)
         deployer = StackDeployer(region=self._region)
@@ -385,7 +402,7 @@ class IDPClient:
             IDPConfigurationError: If no source specified
             IDPProcessingError: If processing fails
         """
-        from idp_cli.batch_processor import BatchProcessor
+        from idp_sdk.core.batch_processor import BatchProcessor
 
         name = self._require_stack(stack_name)
 
@@ -562,7 +579,7 @@ class IDPClient:
         Returns:
             RerunResult with queued counts
         """
-        from idp_cli.rerun_processor import RerunProcessor
+        from idp_sdk.core.rerun_processor import RerunProcessor
 
         name = self._require_stack(stack_name)
         step_str = step.value if isinstance(step, RerunStep) else step
@@ -613,8 +630,8 @@ class IDPClient:
         Returns:
             BatchStatusResult with status details
         """
-        from idp_cli.batch_processor import BatchProcessor
-        from idp_cli.progress_monitor import ProgressMonitor
+        from idp_sdk.core.batch_processor import BatchProcessor
+        from idp_sdk.core.progress_monitor import ProgressMonitor
 
         name = self._require_stack(stack_name)
 
@@ -693,7 +710,7 @@ class IDPClient:
         Returns:
             List of BatchInfo objects
         """
-        from idp_cli.batch_processor import BatchProcessor
+        from idp_sdk.core.batch_processor import BatchProcessor
 
         name = self._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._region)
@@ -733,7 +750,7 @@ class IDPClient:
         Returns:
             DownloadResult with download statistics
         """
-        from idp_cli.batch_processor import BatchProcessor
+        from idp_sdk.core.batch_processor import BatchProcessor
 
         name = self._require_stack(stack_name)
         processor = BatchProcessor(stack_name=name, region=self._region)
@@ -1058,7 +1075,7 @@ class IDPClient:
         Returns:
             ValidationResult with validation status
         """
-        from idp_cli.manifest_parser import validate_manifest
+        from idp_sdk.core.manifest_parser import validate_manifest
 
         is_valid, error = validate_manifest(manifest_path)
 
@@ -1066,7 +1083,7 @@ class IDPClient:
         document_count = None
         has_baselines = False
         if is_valid:
-            from idp_cli.manifest_parser import parse_manifest
+            from idp_sdk.core.manifest_parser import parse_manifest
 
             documents = parse_manifest(manifest_path)
             document_count = len(documents)
@@ -1100,7 +1117,7 @@ class IDPClient:
         Returns:
             StopWorkflowsResult with stop details
         """
-        from idp_cli.stop_workflows import WorkflowStopper
+        from idp_sdk.core.stop_workflows import WorkflowStopper
 
         name = self._require_stack(stack_name)
 
@@ -1136,7 +1153,7 @@ class IDPClient:
         Returns:
             LoadTestResult with test results
         """
-        from idp_cli.load_test import LoadTester
+        from idp_sdk.core.load_test import LoadTester
 
         name = self._require_stack(stack_name)
         tester = LoadTester(stack_name=name, region=self._region)

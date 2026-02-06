@@ -17,8 +17,8 @@ from typing import Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from .manifest_parser import parse_manifest
-from .stack_info import StackInfo
+from idp_sdk.core.manifest_parser import parse_manifest
+from idp_sdk.core.stack_info import StackInfo
 
 logger = logging.getLogger(__name__)
 
