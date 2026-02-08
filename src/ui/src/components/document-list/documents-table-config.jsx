@@ -231,7 +231,8 @@ export const DocumentsCommonHeader = ({
     if (props.customDateRange) {
       const start = new Date(props.customDateRange.startDateTime);
       const end = new Date(props.customDateRange.endDateTime);
-      const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const formatDate = (d) =>
+        `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
       return `${formatDate(start)} → ${formatDate(end)}`;
     }
     return TIME_PERIOD_DROPDOWN_ITEMS.filter((i) => i.count === props.periodsToLoad)[0]?.text || '';

@@ -283,9 +283,13 @@ const TestResultsList = ({ timePeriodHours, setTimePeriodHours, selectedItems, s
           <SpaceBetween direction="horizontal" size="xs">
             <ButtonDropdown loading={loading} onItemClick={handleTimePeriodChange} items={TIME_PERIOD_OPTIONS}>
               {customDateRange
-                ? `Load: ${new Date(customDateRange.startDateTime).toLocaleDateString()} → ${new Date(
-                    customDateRange.endDateTime,
-                  ).toLocaleDateString()}`
+                ? (() => {
+                    const s = new Date(customDateRange.startDateTime);
+                    const e = new Date(customDateRange.endDateTime);
+                    const fmt = (d) =>
+                      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+                    return `Load: ${fmt(s)} → ${fmt(e)}`;
+                  })()
                 : `Load: ${TIME_PERIOD_OPTIONS.find((opt) => opt.hours === timePeriodHours)?.text || ''}`}
             </ButtonDropdown>
             <Button iconName="refresh" variant="normal" loading={loading} onClick={handleRefresh} />
