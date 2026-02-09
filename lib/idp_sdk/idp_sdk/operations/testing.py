@@ -20,13 +20,37 @@ class TestingOperation:
         stack_name: Optional[str] = None,
         rate: int = 100,
         duration: int = 1,
-        **kwargs,
+        schedule_file: Optional[str] = None,
+        dest_prefix: str = "load-test",
     ) -> LoadTestResult:
-        """Run load test."""
-        return self._client.load_test(
-            source_file=source_file,
-            stack_name=stack_name,
-            rate=rate,
-            duration=duration,
-            **kwargs,
-        )
+        """Run load test by copying files to input bucket."""
+        from idp_sdk.core.load_test import LoadTester
+
+        name = self._client._require_stack(stack_name)
+        tester = LoadTester(stack_name=name, region=self._client._region)
+
+        try:
+            if schedule_file:
+                result = tester.run_scheduled_load(
+                    source_file=source_file,
+                    schedule_file=schedule_file,
+                    dest_prefix=dest_prefix,
+                )
+            else:
+                result = tester.run_constant_load(
+                    source_file=source_file,
+                    rate=rate,
+                    duration=duration,
+                    dest_prefix=dest_prefix,
+                )
+
+            return LoadTestResult(
+                success=result.get("success", False),
+                total_files=result.get("total_files", 0),
+                duration_minutes=duration,
+                error=result.get("error"),
+            )
+        except Exception as e:
+            return LoadTestResult(
+                success=False, total_files=0, duration_minutes=duration, error=str(e)
+            )

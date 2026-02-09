@@ -9,15 +9,18 @@ Provides programmatic access to document processing capabilities.
 Example:
     >>> from idp_sdk import IDPClient
     >>>
-    >>> # For stack-dependent operations
-    >>> client = IDPClient(stack_name="my-idp-stack", region="us-west-2")
-    >>> result = client.run_inference(source="./documents/")
-    >>> status = client.get_status(batch_id=result.batch_id)
-    >>>
-    >>> # For stack-independent operations
+    >>> # Stack operations
     >>> client = IDPClient()
-    >>> manifest = client.generate_manifest(directory="./docs/")
-    >>> config = client.config_create(features="min")
+    >>> client.stack.deploy(stack_name="my-stack", pattern="pattern-2")
+    >>>
+    >>> # Batch operations
+    >>> client = IDPClient(stack_name="my-stack", region="us-west-2")
+    >>> result = client.batch.run(source="./documents/")
+    >>> status = client.batch.get_status(batch_id=result.batch_id)
+    >>>
+    >>> # Config operations (no stack required)
+    >>> client = IDPClient()
+    >>> client.config.create(features="min", output="config.yaml")
 """
 
 from .client import IDPClient
@@ -31,30 +34,30 @@ from .exceptions import (
     IDPValidationError,
 )
 from .models import (
+    BatchDeletionResult,
+    BatchDownloadResult,
     BatchInfo,
+    BatchRerunResult,
     BatchResult,
-    BatchStatusResult,
+    BatchStatus,
     ConfigCreateResult,
     ConfigDownloadResult,
     ConfigUploadResult,
     ConfigValidationResult,
-    DeletionResult,
-    DeploymentResult,
     DocumentDeletionResult,
+    DocumentState,
     DocumentStatus,
-    DocumentStatusInfo,
-    DownloadResult,
     LoadTestResult,
     ManifestDocument,
     ManifestResult,
+    ManifestValidationResult,
     Pattern,
-    RerunResult,
     RerunStep,
-    SingleDocumentDeletionResult,
+    StackDeletionResult,
+    StackDeploymentResult,
     StackResources,
-    StackStatus,
+    StackState,
     StopWorkflowsResult,
-    ValidationResult,
 )
 
 __version__ = "0.1.0"
@@ -71,29 +74,34 @@ __all__ = [
     "IDPResourceNotFoundError",
     "IDPTimeoutError",
     # Enums
-    "StackStatus",
-    "DocumentStatus",
+    "StackState",
+    "DocumentState",
     "Pattern",
     "RerunStep",
-    # Models
-    "DeploymentResult",
-    "DeletionResult",
+    # Stack models
+    "StackDeploymentResult",
+    "StackDeletionResult",
+    "StackResources",
+    # Batch models
     "BatchResult",
-    "BatchStatusResult",
-    "DocumentStatusInfo",
-    "DocumentDeletionResult",
-    "SingleDocumentDeletionResult",
-    "RerunResult",
-    "DownloadResult",
-    "ManifestDocument",
-    "ManifestResult",
-    "ValidationResult",
+    "BatchStatus",
     "BatchInfo",
-    "StopWorkflowsResult",
-    "LoadTestResult",
+    "BatchRerunResult",
+    "BatchDownloadResult",
+    # Document models
+    "DocumentStatus",
+    "BatchDeletionResult",
+    "DocumentDeletionResult",
+    # Config models
     "ConfigCreateResult",
     "ConfigValidationResult",
     "ConfigDownloadResult",
     "ConfigUploadResult",
-    "StackResources",
+    # Manifest models
+    "ManifestDocument",
+    "ManifestResult",
+    "ManifestValidationResult",
+    # Testing models
+    "StopWorkflowsResult",
+    "LoadTestResult",
 ]

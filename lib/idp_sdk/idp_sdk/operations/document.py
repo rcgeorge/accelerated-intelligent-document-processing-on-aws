@@ -5,7 +5,7 @@
 
 from typing import Optional
 
-from idp_sdk.models import BatchStatusResult, DocumentDeletionResult
+from idp_sdk.models import BatchDeletionResult, DocumentStatus
 
 
 class DocumentOperation:
@@ -16,14 +16,21 @@ class DocumentOperation:
 
     def get_status(
         self, document_id: str, stack_name: Optional[str] = None
-    ) -> BatchStatusResult:
-        """Get document status."""
-        return self._client.get_status(document_id=document_id, stack_name=stack_name)
+    ) -> DocumentStatus:
+        """Get single document status."""
+        batch_status = self._client.batch.get_status(
+            document_id=document_id, stack_name=stack_name
+        )
+        if batch_status.documents:
+            return batch_status.documents[0]
+        from idp_sdk.exceptions import IDPResourceNotFoundError
+
+        raise IDPResourceNotFoundError(f"Document not found: {document_id}")
 
     def delete(
         self, document_id: str, stack_name: Optional[str] = None, **kwargs
-    ) -> DocumentDeletionResult:
+    ) -> BatchDeletionResult:
         """Delete single document."""
-        return self._client.delete_documents(
+        return self._client.batch.delete_documents(
             document_ids=[document_id], stack_name=stack_name, **kwargs
         )
