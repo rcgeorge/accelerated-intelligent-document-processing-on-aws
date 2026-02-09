@@ -109,13 +109,13 @@ class TestModels:
         assert RerunStep.CLASSIFICATION.value == "classification"
         assert RerunStep.EXTRACTION.value == "extraction"
 
-    def test_document_status_enum(self):
-        """DocumentStatus enum has correct values."""
-        from idp_sdk import DocumentStatus
+    def test_document_state_enum(self):
+        """DocumentState enum has correct values."""
+        from idp_sdk import DocumentState
 
-        assert DocumentStatus.QUEUED.value == "QUEUED"
-        assert DocumentStatus.COMPLETED.value == "COMPLETED"
-        assert DocumentStatus.FAILED.value == "FAILED"
+        assert DocumentState.QUEUED.value == "QUEUED"
+        assert DocumentState.COMPLETED.value == "COMPLETED"
+        assert DocumentState.FAILED.value == "FAILED"
 
     def test_batch_result_creation(self):
         """BatchResult can be created with required fields."""
@@ -151,11 +151,11 @@ class TestModels:
         assert result.document_count == 10
         assert result.baselines_matched == 5
 
-    def test_validation_result_creation(self):
-        """ValidationResult can be created."""
-        from idp_sdk import ValidationResult
+    def test_manifest_validation_result_creation(self):
+        """ManifestValidationResult can be created."""
+        from idp_sdk import ManifestValidationResult
 
-        result = ValidationResult(
+        result = ManifestValidationResult(
             valid=True, error=None, document_count=5, has_baselines=True
         )
 
@@ -185,11 +185,11 @@ class TestModels:
         assert len(result.errors) == 2
         assert len(result.warnings) == 1
 
-    def test_single_document_deletion_result_creation(self):
-        """SingleDocumentDeletionResult can be created."""
-        from idp_sdk import SingleDocumentDeletionResult
+    def test_document_deletion_result_single_creation(self):
+        """DocumentDeletionResult can be created for single document."""
+        from idp_sdk import DocumentDeletionResult
 
-        result = SingleDocumentDeletionResult(
+        result = DocumentDeletionResult(
             success=True,
             object_key="batch-123/doc1.pdf",
             deleted={
@@ -207,18 +207,18 @@ class TestModels:
         assert result.deleted["output_files"] == 5
         assert len(result.errors) == 0
 
-    def test_document_deletion_result_creation(self):
-        """DocumentDeletionResult can be created."""
-        from idp_sdk import DocumentDeletionResult, SingleDocumentDeletionResult
+    def test_batch_deletion_result_creation(self):
+        """BatchDeletionResult can be created."""
+        from idp_sdk import BatchDeletionResult, DocumentDeletionResult
 
-        single_result = SingleDocumentDeletionResult(
+        single_result = DocumentDeletionResult(
             success=True,
             object_key="batch-123/doc1.pdf",
             deleted={"input_file": True},
             errors=[],
         )
 
-        result = DocumentDeletionResult(
+        result = BatchDeletionResult(
             success=True,
             deleted_count=2,
             failed_count=0,
@@ -234,11 +234,11 @@ class TestModels:
         assert result.dry_run is False
         assert len(result.results) == 1
 
-    def test_document_deletion_result_dry_run(self):
-        """DocumentDeletionResult supports dry_run flag."""
-        from idp_sdk import DocumentDeletionResult
+    def test_batch_deletion_result_dry_run(self):
+        """BatchDeletionResult supports dry_run flag."""
+        from idp_sdk import BatchDeletionResult
 
-        result = DocumentDeletionResult(
+        result = BatchDeletionResult(
             success=True,
             deleted_count=0,
             failed_count=0,
@@ -323,53 +323,53 @@ class TestExports:
     def test_enums_exported(self):
         """All enums are exported."""
         from idp_sdk import (
-            DocumentStatus,
+            DocumentState,
             Pattern,
             RerunStep,
-            StackStatus,
+            StackState,
         )
 
-        assert all([StackStatus, DocumentStatus, Pattern, RerunStep])
+        assert all([StackState, DocumentState, Pattern, RerunStep])
 
     def test_models_exported(self):
         """All models are exported."""
         from idp_sdk import (
+            BatchDeletionResult,
+            BatchDownloadResult,
             BatchInfo,
+            BatchRerunResult,
             BatchResult,
-            BatchStatusResult,
+            BatchStatus,
             ConfigCreateResult,
             ConfigDownloadResult,
             ConfigUploadResult,
             ConfigValidationResult,
-            DeletionResult,
-            DeploymentResult,
             DocumentDeletionResult,
-            DocumentStatusInfo,
-            DownloadResult,
+            DocumentStatus,
             LoadTestResult,
             ManifestDocument,
             ManifestResult,
-            RerunResult,
-            SingleDocumentDeletionResult,
+            ManifestValidationResult,
+            StackDeletionResult,
+            StackDeploymentResult,
             StackResources,
             StopWorkflowsResult,
-            ValidationResult,
         )
 
         assert all(
             [
-                DeploymentResult,
-                DeletionResult,
+                StackDeploymentResult,
+                StackDeletionResult,
                 BatchResult,
-                BatchStatusResult,
-                DocumentStatusInfo,
+                BatchStatus,
+                DocumentStatus,
                 DocumentDeletionResult,
-                SingleDocumentDeletionResult,
-                RerunResult,
-                DownloadResult,
+                BatchDeletionResult,
+                BatchRerunResult,
+                BatchDownloadResult,
                 ManifestDocument,
                 ManifestResult,
-                ValidationResult,
+                ManifestValidationResult,
                 BatchInfo,
                 StopWorkflowsResult,
                 LoadTestResult,
