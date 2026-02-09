@@ -115,6 +115,21 @@ const ConfigurationLayout = () => {
     setExportFileName(currentVersionName || 'configuration'); // Update export filename when version changes
   }, [currentVersion?.description, currentVersionName]);
 
+  // Handle URL query parameter for version selection
+  useEffect(() => {
+    // For hash routing, get parameters from the hash part
+    const hash = window.location.hash;
+    const urlParams = new URLSearchParams(hash.split('?')[1] || '');
+    const versionParam = urlParams.get('version');
+
+    if (versionParam && versions.length > 0 && !selectedVersion) {
+      const versionExists = versions.some((v) => v.versionName === versionParam);
+      if (versionExists) {
+        setSelectedVersion(versionParam);
+      }
+    }
+  }, [versions, selectedVersion]);
+
   const {
     schema,
     mergedConfig,

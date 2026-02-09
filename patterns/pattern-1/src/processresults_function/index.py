@@ -1109,6 +1109,14 @@ def handler(event, context):
         workflow_execution_arn=first_response.get("execution_arn"),
     )
 
+    # Get existing document record to extract config version
+    document_service = create_document_service()
+    existing_document = document_service.get_document(object_key)
+    input_config_version = getattr(existing_document, 'config_version', None) if existing_document else None
+
+    # Load configuration using the input document's version
+    config = get_config(as_model=True, version=input_config_version)
+
     # Get confidence threshold from configuration
     # Used for both creating confidence alerts and triggering HITL
     confidence_threshold = config.assessment.default_confidence_threshold

@@ -60,8 +60,11 @@ const ConfigurationComparison = ({ versions, configs }) => {
       getAllPaths(actualConfig).forEach((path) => allPaths.add(path));
     });
 
+    // Sort paths for consistent ordering
+    const sortedPaths = Array.from(allPaths).sort();
+
     // Check each path for differences
-    allPaths.forEach((path) => {
+    sortedPaths.forEach((path) => {
       const values = {};
       let hasDifferences = false;
       let firstValue = null;

@@ -654,6 +654,13 @@ def _build_config_comparison(configs):
         for key in keys:
             if isinstance(current, dict) and key in current:
                 current = current[key]
+            elif isinstance(current, list) and key.isdigit():
+                # Handle array index access
+                index = int(key)
+                if 0 <= index < len(current):
+                    current = current[index]
+                else:
+                    return None
             else:
                 return None
         return current
@@ -671,6 +678,14 @@ def _build_config_comparison(configs):
             current_path = f"{prefix}.{key}" if prefix else key
             if isinstance(value, dict):
                 paths.extend(get_all_paths(value, current_path))
+            elif isinstance(value, list):
+                # Handle arrays by creating indexed paths for each element
+                for i, item in enumerate(value):
+                    item_path = f"{current_path}.{i}"
+                    if isinstance(item, dict):
+                        paths.extend(get_all_paths(item, item_path))
+                    else:
+                        paths.append(item_path)
             else:
                 paths.append(current_path)
         return paths
@@ -683,8 +698,11 @@ def _build_config_comparison(configs):
         actual_config = config.get('Config', {})
         all_paths.update(get_all_paths(actual_config))
     
+    # Sort paths for consistent ordering with configuration UI
+    sorted_paths = sorted(all_paths)
+    
     differences = []
-    for path in all_paths:
+    for path in sorted_paths:
         values = {}
         has_differences = False
         first_value = None
