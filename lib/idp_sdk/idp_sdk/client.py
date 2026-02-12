@@ -1318,7 +1318,7 @@ class IDPClient:
 
         reader = ConfigurationReader(table_name=config_table)
         config_data = reader.get_merged_configuration(
-            "Config", version=config_version, as_model=False
+            version=config_version, as_model=False
         )
 
         # For minimal format, compute diff

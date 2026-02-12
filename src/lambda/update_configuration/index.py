@@ -257,7 +257,7 @@ def merge_custom_with_defaults(
         return custom_config
 
 
-def save_configuration_bypass_manager(config_type: str, config_data: Any, version: str = None, description: str = None, metadata: Dict[str, str] = None) -> None:
+def save_configuration_bypass_manager(config_type: str, config_data: Any, version: str = None, description: str = None) -> None:
     """
     Save configuration directly to DynamoDB bypassing ConfigurationManager.
     Used when ConfigurationManager is unreliable (e.g., after migration from legacy format).
@@ -273,6 +273,15 @@ def save_configuration_bypass_manager(config_type: str, config_data: Any, versio
     
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
+    
+    # Get existing record to preserve created date and active status
+    existing_item = None
+    try:
+        key = {'Configuration': f"{config_type}#{version}" if version else config_type}
+        response = table.get_item(Key=key)
+        existing_item = response.get('Item')
+    except Exception as e:
+        logger.warning(f"Could not retrieve existing record: {e}")
     
     # Convert dict to appropriate config type if needed (same logic as ConfigurationManager)
     if isinstance(config_data, dict):
@@ -294,14 +303,21 @@ def save_configuration_bypass_manager(config_type: str, config_data: Any, versio
         **stringified
     }
     
-    if description:
-        item['Description'] = description
-    
-    if metadata:
-        if "created_at" in metadata:
-            item["CreatedAt"] = metadata["created_at"]
-        if "updated_at" in metadata:
-            item["UpdatedAt"] = metadata["updated_at"]
+    # Preserve existing created date and active status
+    if config_type == "Config":
+        if existing_item:
+            if 'CreatedAt' in existing_item:
+                item['CreatedAt'] = existing_item['CreatedAt']
+            if 'IsActive' in existing_item:
+                item['IsActive'] = existing_item['IsActive']
+            if 'Description' in existing_item and not description:
+                item['Description'] = existing_item['Description']
+        # Set description if provided
+        if description:
+            item['Description'] = description
+        # Always update the timestamp
+        from datetime import datetime
+        item['UpdatedAt'] = datetime.utcnow().isoformat() + 'Z'
     
     table.put_item(Item=item)
     logger.info(f"Saved {config_type}{f'#{version}' if version else ''} configuration bypassing ConfigurationManager")
@@ -499,7 +515,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                                 f"Updated extraction model to: {properties['CustomExtractionModelARN']}"
                             )
 
-                configurations["default"] = {"config": resolved_default}
+                configurations["Config#default#System Default"] = resolved_default
 
             # Process Custom configuration -> save with slugified name
             if (
@@ -516,7 +532,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                     logger.info("Merging custom config with system defaults...")
                     resolved_custom = merge_custom_with_defaults(resolved_custom)
                     
-                configurations["custom"] = {"config": resolved_custom}
+                configurations["Config#custom#"] = resolved_custom
 
             # Process DefaultPricing configuration if provided
             if "DefaultPricing" in properties:
@@ -556,11 +572,6 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                         if isinstance(resolved_config, dict) and resolved_config.get("type") == "object":
                             logger.warning(f"Skipping {prop_name}: appears to be a schema, not a config")
                             continue
-                            
-                        # Check if this looks like pricing config
-                        if isinstance(resolved_config, dict) and "pricing" in resolved_config:
-                            logger.warning(f"Skipping {prop_name}: appears to be pricing config, not IDP config")
-                            continue
                         
                         if isinstance(resolved_config, dict):
                             # Extract description before processing config
@@ -568,7 +579,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                             resolved_config.pop("pricing", None)
                             logger.info(f"Merging {version_name} config with system defaults...")
                             resolved_config = merge_custom_with_defaults(resolved_config)
-                            configurations[version_name] = {"config": resolved_config, "description": description}
+                            configurations[f"Config#{version_name}#{description}"] = resolved_config
                         else:
                             logger.warning(f"Skipping {prop_name}: resolved content is not a dictionary")
                             
@@ -582,18 +593,13 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                 logger.info(f"Applied model swapping for {region_type} region to all configurations")
 
             # Save all configurations
-            current_time = datetime.utcnow().isoformat() + "Z"
-            for config_name, config_info in configurations.items():
-                if config_name in ["default", "custom"]:
+            for config_key, config in configurations.items():
+                if config_key.split("#")[0] == "Config" : # config item
                     # Versioned format - use config_name as version
-                    config_data = config_info["config"]
-                    version = config_name
-                    
+                    _, version, description = config_key.split("#")
                     if version_migration_performed:
                         # Use direct DynamoDB operations when migration was performed
-                        # Only update timestamp since record already exists from migration
-                        metadata = {"updated_at": current_time}
-                        save_configuration_bypass_manager("Config", config_data, version=version, metadata=metadata)
+                        save_configuration_bypass_manager("Config", config, version=version)
                         logger.info(f"Updated Config {version} (bypass mode)")
                     else:
                         # Use ConfigurationManager for normal operations
@@ -603,26 +609,23 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                             existing_config = manager.get_configuration("Config", version)
                         except:
                             pass
-                        
                         if existing_config:
-                            manager.save_configuration("Config", config_data, version=version)
-                        else:
-                            # Get description from config_info if available, otherwise use default
-                            description = config_info.get("description", "")
-                            if not description:
-                                description = "System default" if version == "default" else ""
-                            manager.save_configuration("Config", config_data, version=version, description=description)
+                            manager.save_configuration("Config", config, version=version)
+                        else:  #new config           
+                            manager.save_configuration("Config", config, version=version, description=description)
                         logger.info(f"Updated config version: {version} configuration")
                 else:
                     # Non-versioned configurations (Schema, DefaultPricing)
                     if version_migration_performed:
                         # Use direct DynamoDB operations when migration was performed
-                        save_configuration_bypass_manager(config_name, config_info)
-                        logger.info(f"Updated {config_name} configuration during migration")
+                        save_configuration_bypass_manager(config_key, config)
+                        logger.info(f"Updated {config_key} configuration during migration")
                     else:
                         # Use ConfigurationManager for normal operations                
-                        manager.save_configuration(config_name, config_info)
-                        logger.info(f"Updated {config_name} configuration")
+                        manager.save_configuration(config_key, config)
+                        logger.info(f"Updated {config_key} configuration")
+            
+            
             # For Create: Activate custom if Custom was provided, otherwise default if Default provided
             if request_type == "Create":
                 try:

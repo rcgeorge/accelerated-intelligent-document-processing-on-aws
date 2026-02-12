@@ -35,7 +35,7 @@ class ClassesDiscovery:
             self.config: IDPConfig = cast(
                 IDPConfig,
                 self.config_reader.get_merged_configuration(
-                    "Config", as_model=True, version=self.version
+                    as_model=True, version=self.version
                 ),
             )
         except Exception as e:

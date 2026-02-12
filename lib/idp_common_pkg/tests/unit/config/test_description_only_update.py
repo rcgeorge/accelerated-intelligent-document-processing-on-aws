@@ -167,7 +167,9 @@ def test_description_none_handling():
     # Verify the operation succeeded
     assert result is True
 
-    # Verify the saved item does NOT have Description field updated
+    # Verify the saved item preserves existing description when None passed
     assert saved_item is not None
-    assert "Description" not in saved_item  # Should not be set when None
+    assert (
+        saved_item["Description"] == "existing description"
+    )  # Should preserve existing when None
     assert "UpdatedAt" in saved_item

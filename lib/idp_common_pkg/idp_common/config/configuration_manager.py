@@ -195,11 +195,20 @@ class ConfigurationManager:
                     item["IsActive"] = False  # New versions are not active by default
                     # Set description (empty string if None provided)
                     item["Description"] = description if description is not None else ""
-                else: # existing record
-                    # Always update the modification time
-                    item["UpdatedAt"] = current_time
+                else: # existing record - preserve all existing metadata
+                    # Preserve existing CreatedAt
+                    if existing_record.metadata and existing_record.metadata.created_at:
+                        item["CreatedAt"] = existing_record.metadata.created_at
+                    # Preserve existing IsActive
+                    if existing_record.is_active is not None:
+                        item["IsActive"] = existing_record.is_active
+                    # Preserve existing Description if not provided
                     if description is not None:
                         item["Description"] = description
+                    elif existing_record.description is not None:
+                        item["Description"] = existing_record.description
+                    # Always update the modification time
+                    item["UpdatedAt"] = current_time
                 
             stringified = ConfigurationRecord._stringify_values(config_dict)
             if stringified is not None:
@@ -358,24 +367,24 @@ class ConfigurationManager:
             for version_dict in versions:
                 version_name: Optional[str] = str(version_dict.get("versionName")) if version_dict.get("versionName") else None
                 # CRITICAL: Use RAW Custom (no Pydantic defaults!) to preserve sparse delta pattern
-                old_version = self.get_raw_configuration(CONFIG_TYPE_CONFIG, version=version_name)
+                old_version_dict = self.get_raw_configuration(CONFIG_TYPE_CONFIG, version=version_name)
                 if (
                     old_default
-                    and old_version
+                    and old_version_dict is not None
                     and version_name != DEFAULT_VERSION # sync non default version's only
                     and isinstance(old_default, IDPConfig)
                 ):
                     logger.info(
-                        f"Syncing Version: {version_name} config with new Default while preserving user customizations (sparse)"
+                        f"Syncing Version: {version_name} config with new default while preserving user customizations (sparse)"
                     )
-                    new_version = self._sync_custom_with_new_default_sparse(
-                        old_default, config, old_version
+                    new_version_dict = self._sync_custom_with_new_default_sparse(
+                        old_default=old_default, new_default=config, old_custom_dict=old_version_dict
                     )
-                    # Save ONLY the sparse Custom deltas (NO Pydantic defaults!)
-                    if new_version:
-                        self.save_raw_configuration(CONFIG_TYPE_CONFIG, new_version, version=version)
-                    else:
-                        self.save_raw_configuration(CONFIG_TYPE_CONFIG, None, version=version)
+                    logger.info(
+                        f"Saving Version: {version_name} after sync with updated default, version dict {new_version_dict}"
+                        )
+                    self.save_raw_configuration(CONFIG_TYPE_CONFIG, config_dict=new_version_dict, version=version_name)
+
 
         if config_type == CONFIG_TYPE_CONFIG:
             # get existing record if saving existing version

@@ -256,9 +256,9 @@ const ConfigurationLayout = () => {
   const handleDeleteVersions = async (versionNames) => {
     try {
       for (const versionName of versionNames) {
-        await deleteVersion(versionName);
+        await deleteVersion(versionName, true); // Skip individual refresh
       }
-      await fetchVersions(); // Refresh table
+      await fetchVersions(); // Single refresh after all deletions
       setSelectedVersionsForCompare([]); // Clear selection
 
       // If currently selected version was deleted, clear selection

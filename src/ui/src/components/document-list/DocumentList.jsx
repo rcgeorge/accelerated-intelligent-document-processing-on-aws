@@ -174,13 +174,13 @@ const DocumentList = () => {
     }
   };
 
-  const handleReprocessConfirm = async () => {
+  const handleReprocessConfirm = async (version) => {
     const objectKeys = collectionProps.selectedItems.map((item) => item.objectKey);
-    logger.debug('Reprocessing documents', objectKeys);
+    logger.debug('Reprocessing documents', objectKeys, 'with version', version);
 
     setIsReprocessLoading(true);
     try {
-      const result = await reprocessDocuments(objectKeys);
+      const result = await reprocessDocuments(objectKeys, version);
       logger.debug('Reprocess result', result);
 
       // Close the modal
