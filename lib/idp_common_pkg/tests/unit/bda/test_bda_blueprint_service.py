@@ -1063,10 +1063,9 @@ class TestBdaBlueprintService:
 
         # Verify configuration was updated with new IDP classes
         service.config_manager.handle_update_custom_configuration.assert_called_once()
-        call_args = service.config_manager.handle_update_custom_configuration.call_args[
-            0
-        ][0]
-        updated_classes = call_args["classes"]
+        call_args = service.config_manager.handle_update_custom_configuration.call_args
+        # Access keyword arguments
+        updated_classes = call_args.kwargs["custom_config"]["classes"]
 
         # Should have 2 new IDP classes
         assert len(updated_classes) == 2
@@ -1692,11 +1691,9 @@ class TestBdaBlueprintService:
 
         # Verify the configuration was updated with sanitized class
         assert service.config_manager.handle_update_custom_configuration.called
-        updated_classes = (
-            service.config_manager.handle_update_custom_configuration.call_args[0][0][
-                "classes"
-            ]
-        )
+        call_args = service.config_manager.handle_update_custom_configuration.call_args
+        # Access keyword arguments
+        updated_classes = call_args.kwargs["custom_config"]["classes"]
 
         # Verify the class in configuration has sanitized property names
         assert "PropertyWithAmpersand" in updated_classes[0]["properties"]

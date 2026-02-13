@@ -2,15 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Modal, SpaceBetween, Button, Select, FormField } from '@cloudscape-design/components';
+import { Box, Modal, SpaceBetween, Button, Select, FormField, Alert } from '@cloudscape-design/components';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
+import useSettingsContext from '../../contexts/settings';
 
 const logger = new ConsoleLogger('ReprocessDocumentModal');
 
 const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems = [], isLoading = false }) => {
   const [selectedVersion, setSelectedVersion] = useState(null);
   const { versions, getVersionOptions } = useConfigurationVersions();
+  const { settings } = useSettingsContext();
+
+  // Helper function to check if Pattern-1 is selected
+  const isPattern1 = settings?.IDPPattern?.includes('Pattern1');
 
   // Set default to active version when modal opens
   useEffect(() => {
@@ -60,6 +65,13 @@ const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems =
     >
       <SpaceBetween size="m">
         <p>{message}</p>
+
+        {isPattern1 && (
+          <Alert type="info">
+            <strong>NOTE:</strong> To ensure that BDA project blueprints are aligned with your selected config version, be sure to execute
+            &quot;Sync To BDA&quot; for your config version from the View/Edit Configuration page.
+          </Alert>
+        )}
 
         <FormField label="Configuration Version" description="Select which configuration version to use for reprocessing these documents">
           <Select

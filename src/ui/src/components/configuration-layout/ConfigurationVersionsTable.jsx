@@ -163,7 +163,7 @@ const ConfigurationVersionsTable = ({
         }
         header={
           <SpaceBetween size="s">
-            <Header variant="h2">Configuration Versions ({filteredItemsCount})</Header>
+            <Header variant="h4">Configuration Versions ({filteredItemsCount})</Header>
             {/* Action buttons row */}
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={onCompareVersions} disabled={selectedVersionsForCompare.length < 2}>

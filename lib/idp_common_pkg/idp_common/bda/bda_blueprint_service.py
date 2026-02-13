@@ -1475,7 +1475,9 @@ class BdaBlueprintService:
         Raises:
             Exception: If conversion fails
         """
-        logger.info("Converting AWS standard blueprints to custom blueprints")
+        logger.info(
+            f"Converting AWS standard blueprints to custom blueprints for version {version}"
+        )
 
         try:
             # Retrieve ALL blueprints including AWS standard ones
@@ -1508,7 +1510,7 @@ class BdaBlueprintService:
             # Remove AWS standard blueprints from project if any were converted
             if aws_blueprint_arns_to_remove:
                 logger.info(
-                    f"Removing {len(aws_blueprint_arns_to_remove)} AWS standard blueprints from project"
+                    f"Removing {len(aws_blueprint_arns_to_remove)} AWS standard blueprints from project version: {version}"
                 )
 
                 try:
@@ -1538,7 +1540,7 @@ class BdaBlueprintService:
             if converted_classes:
                 all_classes = existing_classes + converted_classes
                 self.config_manager.handle_update_custom_configuration(
-                    {"classes": all_classes}
+                    custom_config={"classes": all_classes}, version=version
                 )
 
             return {
@@ -1666,7 +1668,7 @@ class BdaBlueprintService:
                     f"Saving updated classes (added: {len(classess_added)}, modified: {classes_modified})"
                 )
                 self.config_manager.handle_update_custom_configuration(
-                    {"classes": classess}
+                    custom_config={"classes": classess}, version=version
                 )
 
             return classess_status

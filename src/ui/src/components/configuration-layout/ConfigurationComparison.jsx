@@ -56,8 +56,8 @@ const ConfigurationComparison = ({ versions, configs }) => {
     // Get all possible paths from all configs
     const allPaths = new Set();
     Object.values(configsToCompare).forEach((config) => {
-      const actualConfig = config.custom || {};
-      getAllPaths(actualConfig).forEach((path) => allPaths.add(path));
+      // Now we receive merged config directly, not the old {custom, default, schema} format
+      getAllPaths(config || {}).forEach((path) => allPaths.add(path));
     });
 
     // Sort paths for consistent ordering
@@ -72,8 +72,8 @@ const ConfigurationComparison = ({ versions, configs }) => {
 
       versions.forEach((version) => {
         const config = configsToCompare[version];
-        const actualConfig = config.custom || {};
-        const value = getNestedValue(actualConfig, path);
+        // Now we receive merged config directly, not the old {custom, default, schema} format
+        const value = getNestedValue(config || {}, path);
 
         // Always include the value, even if null/undefined (missing field)
         const strValue =
@@ -99,7 +99,7 @@ const ConfigurationComparison = ({ versions, configs }) => {
       }
     });
 
-    return differences;
+    return differences.sort((a, b) => a.field.localeCompare(b.field));
   };
 
   // Helper to get nested value from object using dot notation
@@ -120,18 +120,8 @@ const ConfigurationComparison = ({ versions, configs }) => {
     return String(value);
   };
 
-  // Parse JSON strings if needed
-  const parsedConfigs = {};
-  Object.keys(configs).forEach((version) => {
-    const config = configs[version];
-    parsedConfigs[version] = {
-      custom: typeof config.custom === 'string' ? JSON.parse(config.custom) : config.custom,
-      default: typeof config.default === 'string' ? JSON.parse(config.default) : config.default,
-      schema: typeof config.schema === 'string' ? JSON.parse(config.schema) : config.schema,
-    };
-  });
-
-  const differences = findDifferences(parsedConfigs);
+  // Now configs are already merged, no need to parse old format
+  const differences = findDifferences(configs);
 
   // Export functions
   const exportToCSV = () => {
@@ -170,7 +160,6 @@ const ConfigurationComparison = ({ versions, configs }) => {
 
   // Debug logging
   console.log('Configs received:', configs);
-  console.log('Parsed configs:', parsedConfigs);
   console.log('Differences found:', differences);
 
   // Create column definitions with equal width distribution

@@ -38,6 +38,47 @@ import syncBdaIdpMutation from '../../graphql/queries/syncBdaIdp';
 const client = generateClient();
 const logger = new ConsoleLogger('ConfigurationLayout');
 
+// Utility function to normalize boolean values from strings (same as use-configuration.js)
+const normalizeBooleans = (obj, schema) => {
+  if (!obj || !schema) return obj;
+
+  const normalizeValue = (value, propertySchema) => {
+    if (propertySchema?.type === 'boolean') {
+      if (typeof value === 'string') {
+        if (value.toLowerCase() === 'true') return true;
+        if (value.toLowerCase() === 'false') return false;
+      }
+      return value;
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value) && propertySchema?.properties) {
+      const normalized = { ...value };
+      Object.keys(normalized).forEach((key) => {
+        if (propertySchema.properties[key]) {
+          normalized[key] = normalizeValue(normalized[key], propertySchema.properties[key]);
+        }
+      });
+      return normalized;
+    }
+
+    if (Array.isArray(value) && propertySchema?.items) {
+      return value.map((item) => normalizeValue(item, propertySchema.items));
+    }
+
+    return value;
+  };
+
+  const normalized = { ...obj };
+  if (schema.properties) {
+    Object.keys(normalized).forEach((key) => {
+      if (schema.properties[key]) {
+        normalized[key] = normalizeValue(normalized[key], schema.properties[key]);
+      }
+    });
+  }
+  return normalized;
+};
+
 // Utility function to check if two values are numerically equivalent
 // Handles cases where 5 and 5.0, or "5" and 5 should be considered equal
 const areNumericValuesEqual = (val1, val2) => {
@@ -171,8 +212,45 @@ const ConfigurationLayout = () => {
 
     setComparingVersions(true);
     try {
-      // Fetch configurations for selected versions
-      const configPromises = selectedVersionsForCompare.map((versionName) => fetchVersion(versionName));
+      // Fetch raw configurations and merge them using same logic as fetchConfiguration
+      const configPromises = selectedVersionsForCompare.map(async (versionName) => {
+        const rawConfig = await fetchVersion(versionName);
+
+        // Parse the configs (same logic as fetchConfiguration)
+        let schemaObj = rawConfig.schema;
+        let defaultObj = rawConfig.default;
+        let customObj = rawConfig.custom;
+
+        // Parse schema if it's a string
+        if (typeof rawConfig.schema === 'string') {
+          schemaObj = JSON.parse(rawConfig.schema);
+        }
+
+        // Unwrap nested Schema object if present
+        if (schemaObj && schemaObj.Schema) {
+          schemaObj = schemaObj.Schema;
+        }
+
+        // Parse default config if it's a string
+        if (typeof rawConfig.default === 'string') {
+          defaultObj = JSON.parse(rawConfig.default);
+        }
+
+        // Parse custom config if it's a string
+        if (typeof rawConfig.custom === 'string' && rawConfig.custom) {
+          customObj = JSON.parse(rawConfig.custom);
+        } else if (!rawConfig.custom) {
+          customObj = {};
+        }
+
+        // Normalize boolean values (same as fetchConfiguration)
+        const normalizedDefaultObj = normalizeBooleans(defaultObj, schemaObj);
+        const normalizedCustomObj = normalizeBooleans(customObj, schemaObj);
+
+        // Return merged config (same as fetchConfiguration)
+        return deepMerge(normalizedDefaultObj, normalizedCustomObj);
+      });
+
       const configs = await Promise.all(configPromises);
 
       // Create comparison data
@@ -194,7 +272,30 @@ const ConfigurationLayout = () => {
   };
 
   // Handle activate version
-  const handleActivateVersion = async (versionName) => {
+  const handleActivateVersion = async (versionName, skipSyncConfirmation = false) => {
+    // Validate versionName
+    if (!versionName) {
+      console.error('Cannot activate version: versionName is null or undefined');
+      return;
+    }
+
+    // Check if Pattern 1 and show confirmation for auto-sync to BDA (unless skipping)
+    if (isPattern1 && !skipSyncConfirmation) {
+      setShowActivateVersionConfirmModal(true);
+      return;
+    }
+
+    // Direct activation for non-Pattern 1 or when skipping confirmation
+    await performActivateVersion(versionName);
+  };
+
+  // Perform the actual activation
+  const performActivateVersion = async (versionName) => {
+    if (!versionName) {
+      console.error('Cannot activate version: versionName is null or undefined');
+      return;
+    }
+
     try {
       await setActiveVersion(versionName);
 
@@ -204,6 +305,27 @@ const ConfigurationLayout = () => {
       setSelectedVersion(versionName); // Select the activated version (useEffect will fetch config)
     } catch (error) {
       console.error('Failed to activate version:', error);
+    }
+  };
+
+  // Perform sync to BDA then activate version
+  const performSyncThenActivate = async (versionName) => {
+    if (!versionName) {
+      console.error('Cannot sync and activate: versionName is null or undefined');
+      return;
+    }
+
+    try {
+      // First sync to BDA
+      await handleSyncBdaIdp('idp_to_bda');
+      logger.debug(`Synced to BDA before activating version ${versionName}`);
+
+      // Then activate the version (but don't sync again since we just did)
+      await setActiveVersion(versionName);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setSelectedVersion(versionName);
+    } catch (error) {
+      console.error('Failed to sync and activate version:', error);
     }
   };
 
@@ -306,6 +428,8 @@ const ConfigurationLayout = () => {
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = useState('');
   const [syncError, setSyncError] = useState(null);
+  const [showSyncToBdaConfirmModal, setShowSyncToBdaConfirmModal] = useState(false);
+  const [showActivateVersionConfirmModal, setShowActivateVersionConfirmModal] = useState(false);
 
   const editorRef = useRef(null);
 
@@ -1427,6 +1551,17 @@ const ConfigurationLayout = () => {
           }, 5000);
         }
         logger.debug('BDA/IDP sync completed successfully');
+
+        // If this was sync to BDA, activate the version (skip confirmation to prevent circular call)
+        if (direction === 'idp_to_bda') {
+          try {
+            await handleActivateVersion(currentVersionName, true); // Skip confirmation
+            logger.debug(`Activated version ${currentVersionName} after sync to BDA`);
+          } catch (activateErr) {
+            logger.error('Failed to activate version after sync:', activateErr);
+            // Don't fail the sync, just log the error
+          }
+        }
       } else {
         const errorMsg = response.error?.message || response.message || 'Sync operation failed';
         setSyncError(errorMsg);
@@ -1687,6 +1822,7 @@ const ConfigurationLayout = () => {
       {/* Configuration Versions Table */}
       <ExpandableSection
         headerText="Configuration Versions"
+        headerTextTagOverride="h1"
         expanded={versionsTableExpanded}
         onChange={({ detail }) => setVersionsTableExpanded(detail.expanded)}
       >
@@ -1983,7 +2119,7 @@ const ConfigurationLayout = () => {
       <Container
         header={
           <Header
-            variant="h2"
+            variant="h3"
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <SegmentedControl
@@ -2017,7 +2153,7 @@ const ConfigurationLayout = () => {
                     <Button variant="normal" onClick={() => handleSyncBdaIdp('bda_to_idp')} loading={syncingDirection === 'bda_to_idp'}>
                       Sync from BDA
                     </Button>
-                    <Button variant="normal" onClick={() => handleSyncBdaIdp('idp_to_bda')} loading={syncingDirection === 'idp_to_bda'}>
+                    <Button variant="normal" onClick={() => setShowSyncToBdaConfirmModal(true)} loading={syncingDirection === 'idp_to_bda'}>
                       Sync to BDA
                     </Button>
                   </>
@@ -2349,6 +2485,81 @@ const ConfigurationLayout = () => {
         }
       >
         {showCompareModal && compareData && <ConfigurationComparison versions={compareData.versions} configs={compareData.configs} />}
+      </Modal>
+
+      {/* Sync to BDA Confirmation Modal */}
+      <Modal
+        visible={showSyncToBdaConfirmModal}
+        onDismiss={() => setShowSyncToBdaConfirmModal(false)}
+        header="Confirm Sync to BDA"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowSyncToBdaConfirmModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setShowSyncToBdaConfirmModal(false);
+                  handleSyncBdaIdp('idp_to_bda');
+                }}
+                loading={syncingDirection === 'idp_to_bda'}
+              >
+                Confirm Sync
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="warning">
+            This will sync your IDP document classes to BDA blueprints and set <strong>{currentVersionName}</strong> as the active
+            configuration version.
+          </Alert>
+        </SpaceBetween>
+      </Modal>
+
+      {/* Activate Version Confirmation Modal */}
+      <Modal
+        visible={showActivateVersionConfirmModal}
+        onDismiss={() => setShowActivateVersionConfirmModal(false)}
+        header="Confirm Activate Version"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowActivateVersionConfirmModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setShowActivateVersionConfirmModal(false);
+                  if (selectedVersionsForCompare[0]) {
+                    performSyncThenActivate(selectedVersionsForCompare[0]);
+                  }
+                }}
+                loading={syncingDirection === 'idp_to_bda'}
+                disabled={!selectedVersionsForCompare[0]}
+              >
+                Confirm Activate
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="warning">
+            {selectedVersionsForCompare[0] ? (
+              <>
+                Activating version <strong>{selectedVersionsForCompare[0]}</strong> will first sync your IDP document classes to BDA
+                blueprints, then set it as the active configuration version.
+              </>
+            ) : (
+              <>No version selected. Please select a version to activate.</>
+            )}
+          </Alert>
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );
