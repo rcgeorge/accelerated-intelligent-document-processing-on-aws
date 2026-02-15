@@ -834,8 +834,8 @@ Resources:
     Properties:
       TemplateURL: ./nested/bda-lending-project/.aws-sam/packaged.yaml
       Parameters:
-        ProjectName: !Sub "${AWS::StackName}-BDA-Lending-Sample-Project"
-        ProjectDescription: !Sub "${AWS::StackName}-BDA-Lending-Sample-Project"
+        ProjectName: !Sub "${AWS::StackName}-Project"
+        ProjectDescription: !Sub "${AWS::StackName}-Project"
         LogLevel: !Ref LogLevel
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
 
