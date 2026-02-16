@@ -428,17 +428,21 @@ class ConfigurationManager:
 
         Raises:
             ClientError: If DynamoDB operation fails
-            ValueError: If version is required but not provided, or trying to delete active version
+            ValueError: If version is required but not provided, or trying to delete active/default version
         """
         try:
             if config_type == CONFIG_TYPE_CONFIG:
                 if version is None:
                     raise ValueError("Version is required for Config type")
 
+                # Prevent deletion of default version
+                if version.lower() == DEFAULT_VERSION.lower():
+                    raise ValueError(f"Cannot delete the '{DEFAULT_VERSION}' configuration version")
+
                 record = self._read_record(CONFIG_TYPE_CONFIG, version)
                 logger.info(f"Checking version {version} for deletion. Record found: {record is not None}, Is active: {record.is_active if record else 'N/A'}")
                 if not record:
-                    raise ClientError(f"Version: {version} not found in configurations")
+                    raise ValueError(f"Version: {version} not found in configurations")
                 if record and record.is_active:
                     raise ValueError(f"Cannot delete active version {version}. Activate another version first.")
                 key = f"{CONFIG_TYPE_CONFIG}#{version}"
