@@ -261,6 +261,28 @@ pricing:
       - name: cacheWriteInputTokens
         price: "6.25E-6"
 
+  - name: bedrock/us.anthropic.claude-opus-4-6-v1
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/us.anthropic.claude-opus-4-6-v1:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
+
   # ---------------------------------------------------------------------------
   # Amazon Bedrock Models - Amazon Nova (EU)
   # ---------------------------------------------------------------------------
@@ -384,6 +406,28 @@ pricing:
       - name: cacheWriteInputTokens
         price: "6.25E-6"
 
+  - name: bedrock/eu.anthropic.claude-opus-4-6-v1
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/eu.anthropic.claude-opus-4-6-v1:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
+
   # ---------------------------------------------------------------------------
   # Amazon Bedrock Models - Global/Cross-Region
   # ---------------------------------------------------------------------------
@@ -463,6 +507,28 @@ pricing:
         price: "5.0E-7"
       - name: cacheWriteInputTokens
         price: "6.25E-6"
+
+  - name: bedrock/global.anthropic.claude-opus-4-6-v1
+    units:
+      - name: inputTokens
+        price: "5.0E-6"
+      - name: outputTokens
+        price: "2.5E-5"
+      - name: cacheReadInputTokens
+        price: "5.0E-7"
+      - name: cacheWriteInputTokens
+        price: "6.25E-6"
+
+  - name: bedrock/global.anthropic.claude-opus-4-6-v1:1m
+    units:
+      - name: inputTokens
+        price: "10.0E-6"
+      - name: outputTokens
+        price: "3.75E-5"
+      - name: cacheReadInputTokens
+        price: "1.0E-6"
+      - name: cacheWriteInputTokens
+        price: "12.5E-6"
 
   # ---------------------------------------------------------------------------
   # Amazon Bedrock Models - Third-Party

@@ -1499,6 +1499,8 @@ Configure from these supported models:
 - `us.anthropic.claude-opus-4-20250514-v1:0`
 - `us.anthropic.claude-opus-4-1-20250805-v1:0`
 - `us.anthropic.claude-opus-4-5-20251101-v1:0`
+- `us.anthropic.claude-opus-4-6-v1`
+- `us.anthropic.claude-opus-4-6-v1:1m`
 - `eu.amazon.nova-lite-v1:0`
 - `eu.amazon.nova-pro-v1:0`
 - `eu.amazon.nova-2-lite-v1:0`
@@ -1510,12 +1512,16 @@ Configure from these supported models:
 - `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - `eu.anthropic.claude-sonnet-4-5-20250929-v1:0:1m`
 - `eu.anthropic.claude-opus-4-5-20251101-v1:0`
+- `eu.anthropic.claude-opus-4-6-v1`
+- `eu.anthropic.claude-opus-4-6-v1:1m`
 - `qwen.qwen3-vl-235b-a22b`
 - `global.amazon.nova-2-lite-v1:0`
 - `global.anthropic.claude-haiku-4-5-20251001-v1:0`
 - `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - `global.anthropic.claude-sonnet-4-5-20250929-v1:0:1m`
 - `global.anthropic.claude-opus-4-5-20251101-v1:0`
+- `global.anthropic.claude-opus-4-6-v1`
+- `global.anthropic.claude-opus-4-6-v1:1m`
 
 #### When to Configure Bedrock OCR
 
