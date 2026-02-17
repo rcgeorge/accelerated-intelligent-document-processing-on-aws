@@ -95,6 +95,28 @@ def start_workflow(document: Document) -> Dict[str, Any]:
         compressed_document = document.to_dict()
         logger.warning("No WORKING_BUCKET configured, sending uncompressed document to workflow")
     
+    # Inject use_bda flag from config into document for state machine routing
+    # The unified state machine uses $.document.use_bda to choose BDA vs pipeline branch
+    config_table_name = os.environ.get('CONFIG_TABLE')
+    if config_table_name:
+        try:
+            config_table = dynamodb.Table(config_table_name)
+            config_version = getattr(document, 'config_version', None) or 'default'
+            config_key = f"Config#{config_version}" if config_version != 'default' else 'Config'
+            response = config_table.get_item(Key={'Configuration': config_key})
+            item = response.get('Item', {})
+            use_bda = item.get('use_bda', False)
+            # Normalize string booleans from DynamoDB
+            if isinstance(use_bda, str):
+                use_bda = use_bda.lower() == 'true'
+            compressed_document['use_bda'] = bool(use_bda)
+            logger.info(f"Config version '{config_version}': use_bda={use_bda}")
+        except Exception as e:
+            logger.warning(f"Could not read use_bda from config: {e}. Defaulting to false.")
+            compressed_document['use_bda'] = False
+    else:
+        compressed_document['use_bda'] = False
+
     event = {
         "document": compressed_document
     }
