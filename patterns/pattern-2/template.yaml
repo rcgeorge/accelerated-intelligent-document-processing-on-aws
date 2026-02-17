@@ -450,6 +450,7 @@ Resources:
             order: 2
             type: object
             sectionLabel: OCR Configuration
+            dependsOn: { field: "use_bda", value: false }
             required:
               - features
             properties:
@@ -810,6 +811,7 @@ Resources:
             order: 3
             type: object
             sectionLabel: Classification Inference
+            dependsOn: { field: "use_bda", value: false }
             required:
               - model
               - temperature
@@ -958,6 +960,7 @@ Resources:
             type: object
             format: section
             sectionLabel: Extraction Inference
+            dependsOn: { field: "use_bda", value: false }
             required:
               - model
               - temperature
