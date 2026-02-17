@@ -1106,25 +1106,37 @@ Resources:
           assessment:
             order: 5
             type: object
-            sectionLabel: Assessment Inference
-            description: "Not used when BDA is enabled"
-            dependsOn: { field: "use_bda", value: false }
+            sectionLabel: Assessment & HITL Configuration
             properties:
+              hitl_enabled:
+                type: boolean
+                description: Enable Human-in-the-Loop (HITL) review for low confidence extractions
+                default: false
+                order: 0
+              default_confidence_threshold:
+                type: number
+                description: Confidence Threshold (0.0-1.0) - Documents with confidence below this threshold will trigger HITL review and show confidence alerts
+                minimum: 0.0
+                maximum: 1.0
+                default: 0.8
+                order: 1
               enabled:
                 type: boolean
-                description: Enable or disable assessment processing
+                description: Enable or disable assessment processing (step-by-step pipeline only)
                 default: true
-                order: 0
+                order: 2
+                dependsOn: { field: "use_bda", value: false }
               validation_enabled:
                 type: boolean
                 description: Enable or disable assessment validation checks
                 default: false
-                order: 1
-                dependsOn: { field: "enabled", value: true }
+                order: 3
+                dependsOn: { field: "use_bda", value: false }
               image:
                 type: object
                 sectionLabel: Image Processing Settings
                 description: Configure image resolution and processing options for for image attachments in assessment
+                dependsOn: { field: "use_bda", value: false }
                 order: 2
                 properties:
                   target_width:
@@ -1143,6 +1155,7 @@ Resources:
                 type: object
                 sectionLabel: Granular Assessment Configuration
                 description: Configure granular assessment for improved accuracy and scalability with large documents
+                dependsOn: { field: "use_bda", value: false }
                 order: 3
                 properties:
                   enabled:
@@ -1174,18 +1187,6 @@ Resources:
                     default: 1
                     order: 3
                     dependsOn: { field: "enabled", value: true }
-              hitl_enabled:
-                type: boolean
-                description: Enable Human-in-the-Loop (HITL) review for low confidence extractions
-                default: false
-                order: 4
-              default_confidence_threshold:
-                type: number
-                description: Confidence Threshold (0.0-1.0) - Documents with confidence below this threshold will trigger HITL review and show confidence alerts
-                minimum: 0.0
-                maximum: 1.0
-                default: 0.8
-                order: 5
               model:
                 type: string
                 description: "Bedrock model ID. Select 'LambdaHook' to use a custom Lambda function for inference."
