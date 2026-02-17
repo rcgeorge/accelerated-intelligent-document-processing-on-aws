@@ -1512,7 +1512,7 @@ const ConfigBuilder = ({
       if (typeof currentValue === 'string' && (currentValue === 'true' || currentValue === 'false')) {
         normalizedValue = currentValue === 'true';
       }
-      const normalizedDepValues = depValues.map(v => {
+      const normalizedDepValues = depValues.map((v) => {
         if (typeof v === 'string' && (v === 'true' || v === 'false')) return v === 'true';
         return v;
       });
