@@ -1010,6 +1010,33 @@ def calculate_latency_distribution(
     return result
 
 
+def _lookup_quota(quotas_dict, model_id):
+    """Look up quota for a model ID, handling :1m suffix fallback.
+    
+    The ':1m' suffix is a local convention indicating 1M context window support.
+    It's not a real model variant - it shares the same AWS Service Quotas as the base model.
+    When looking up quotas, we try exact match first, then fall back to the base model ID.
+    """
+    # Try exact match first
+    quota = quotas_dict.get(model_id)
+    if quota is not None:
+        return quota
+    
+    # If model ID ends with :1m, try base model ID and :0 variant
+    if model_id.endswith(":1m"):
+        base_id = model_id[:-3]  # Strip ":1m"
+        quota = quotas_dict.get(base_id)
+        if quota is not None:
+            print(f"🔍 Quota lookup: mapped {model_id} → {base_id}")
+            return quota
+        quota = quotas_dict.get(base_id + ":0")
+        if quota is not None:
+            print(f"🔍 Quota lookup: mapped {model_id} → {base_id}:0")
+            return quota
+    
+    return None
+
+
 def build_simple_quota_requirements(
     pages_per_hour,
     tokens_per_hour,
@@ -1118,12 +1145,14 @@ def build_simple_quota_requirements(
             continue
 
         # Get TPM model quota - REQUIRED, no defaults
-        model_quota_tpm = quotas.get("bedrock_models", {}).get(model_id)
+        # Uses _lookup_quota to handle :1m suffix fallback (shares quota with base model)
+        model_quota_tpm = _lookup_quota(quotas.get("bedrock_models", {}), model_id)
         if model_quota_tpm is None:
             raise ValueError(f"TPM quota not available for model {model_id} ({step_name}). Add model to BEDROCK_MODEL_QUOTA_CODES environment variable.")
 
         # Get RPM model quota - REQUIRED, no defaults
-        model_quota_rpm = quotas.get("bedrock_models_rpm", {}).get(model_id)
+        # Uses _lookup_quota to handle :1m suffix fallback (shares quota with base model)
+        model_quota_rpm = _lookup_quota(quotas.get("bedrock_models_rpm", {}), model_id)
         if model_quota_rpm is None:
             raise ValueError(f"RPM quota not available for model {model_id} ({step_name}). Add model to BEDROCK_MODEL_RPM_QUOTA_CODES environment variable.")
 
