@@ -2282,8 +2282,8 @@ const ConfigurationLayout = (): React.JSX.Element => {
                 </Alert>
               ) : (
                 <Alert type="warning" header="BDA Enabled — No Project Linked">
-                  BDA is enabled but no BDA project is linked to this version. Use <strong>Sync to BDA</strong> to create or link a
-                  project, or <strong>Sync from BDA</strong> to import blueprints from an existing project.
+                  BDA is enabled but no BDA project is linked to this version. Use <strong>Sync to BDA</strong> to create or link a project,
+                  or <strong>Sync from BDA</strong> to import blueprints from an existing project.
                 </Alert>
               )}
             </>
@@ -2666,8 +2666,8 @@ const ConfigurationLayout = (): React.JSX.Element => {
       >
         <SpaceBetween size="m">
           <Box>
-            No BDA project is currently linked to this config version. Enter the ARN of the BDA project to import blueprints from.
-            The project will be linked to this version for future syncs.
+            No BDA project is currently linked to this config version. Enter the ARN of the BDA project to import blueprints from. The
+            project will be linked to this version for future syncs.
           </Box>
           <FormField
             label="BDA Project ARN"
