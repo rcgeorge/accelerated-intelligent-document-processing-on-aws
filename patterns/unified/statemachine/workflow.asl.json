@@ -59,7 +59,7 @@
                     "taskToken.$": "$$.Task.Token",
                     "execution_arn.$": "$$.Execution.Id",
                     "working_bucket": "${WorkingBucket}",
-                    "BDAProjectArn": "${BDAProjectArn}",
+                    "BDAProjectArn.$": "$.document.bda_project_arn",
                     "document.$": "$.document"
                 }
             },

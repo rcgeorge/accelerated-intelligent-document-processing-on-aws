@@ -71,6 +71,23 @@ PATTERNSTACK params:
   SourceZipfile: "unified-source-{hash}.zip"
 ```
 
+### BDA Routing Fix (February 23, 2026)
+**Status:** ✅ Code changes complete. Ready for deploy & test.
+
+Fixed 3 bugs preventing BDA processing from being triggered:
+1. **Bug #0 (Blocking):** `CONFIG_TABLE` env var was missing from QueueProcessor Lambda — `os.environ.get('CONFIG_TABLE')` always returned `None`, so `use_bda` always defaulted to `False`
+2. **Bug #1:** Even with CONFIG_TABLE set, the raw DynamoDB `get_item` read could never find `use_bda` because config data is gzip-compressed — needed to use `ConfigurationManager` to decompress
+3. **Bug #2:** BDA Project ARN was static from CloudFormation deploy time (`${BDAProjectArn}` substitution), but BDA projects are now per-config-version — changed to `$.document.bda_project_arn` from state machine input
+
+**Files Modified:**
+- `src/lambda/queue_processor/index.py` — Uses `ConfigurationManager` to read `use_bda` + `bda_project_arn` per config version
+- `template.yaml` — Added `CONFIG_TABLE` env var and `DynamoDBReadPolicy` to QueueProcessor
+- `patterns/unified/statemachine/workflow.asl.json` — `BDA_InvokeDataAutomation` now uses `"BDAProjectArn.$": "$.document.bda_project_arn"` (dynamic from input)
+
+**Safety features added:**
+- If `use_bda=True` but no BDA project ARN is linked, falls back to pipeline mode with clear warning log
+- If `CONFIG_TABLE` env var is missing, logs warning and defaults to pipeline mode
+
 ### Remaining Work (Next Session)
 
 #### 🔴 High Priority

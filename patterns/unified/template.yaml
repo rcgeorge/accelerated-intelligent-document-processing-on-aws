@@ -2580,7 +2580,7 @@ Resources:
         Command:
           - "index.handler"
       Timeout: 900
-      MemorySize: 512
+      MemorySize: 4096
       Tracing: Active
       Environment:
         Variables:
@@ -2706,7 +2706,7 @@ Resources:
         Command:
           - "index.handler"
       Timeout: 900
-      MemorySize: 512
+      MemorySize: 4096
       Tracing: Active
       Environment:
         Variables:
@@ -3029,7 +3029,7 @@ Resources:
         Command:
           - "index.handler"
       Timeout: 900
-      MemorySize: 1024
+      MemorySize: 4096
       Tracing: Active
       Environment:
         Variables:
