@@ -138,7 +138,7 @@ class BdaBlueprintService:
         )
         bootstrap_blueprint = self.blueprint_creator.create_blueprint(
             document_type="DOCUMENT",
-            blueprint_name=f"{project_name}-bootstrap",
+            blueprint_name=f"{project_name}-bootstrap-{uuid.uuid4().hex[:8]}",
             schema=bootstrap_schema,
         )
 
