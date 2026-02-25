@@ -1834,12 +1834,10 @@ def status(
                 sys.exit(1)
 
             if search_results.get("count", 0) == 0:
-                console.print(
-                    f"[yellow]No documents found matching batch-id '{batch_id}'"
-                )
+                msg = f"No documents found matching batch-id '{batch_id}'"
                 if object_status:
-                    console.print(f" with status '{object_status}'")
-                console.print("[/yellow]")
+                    msg += f" with status '{object_status}'"
+                console.print(f"[yellow]{msg}[/yellow]")
                 sys.exit(1)
 
             # Extract document IDs from search results
