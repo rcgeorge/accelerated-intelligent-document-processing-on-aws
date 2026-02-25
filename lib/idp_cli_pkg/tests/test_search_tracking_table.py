@@ -5,12 +5,10 @@
 Unit tests for TrackingTableSearcher class.
 """
 
-import json
 from datetime import datetime
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-
 from idp_cli.search_tracking_table import TrackingTableSearcher
 
 
@@ -86,9 +84,7 @@ class TestTrackingTableSearcher:
         assert call_args["TableName"] == "test-documents-table"
         assert "FilterExpression" in call_args
         assert call_args["ExpressionAttributeValues"][":pk"]["S"] == "batch-123"
-        assert (
-            call_args["ExpressionAttributeValues"][":status"]["S"] == "COMPLETED"
-        )
+        assert call_args["ExpressionAttributeValues"][":status"]["S"] == "COMPLETED"
 
     def test_search_by_pk_and_status_with_pagination(self, searcher, mock_dynamodb):
         """Test search with pagination."""
