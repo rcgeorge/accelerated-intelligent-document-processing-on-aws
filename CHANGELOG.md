@@ -36,6 +36,7 @@ SPDX-License-Identifier: MIT-0
 
 - **Fixed DynamoDB 400KB item size limit blocking configs with 45+ document classes** — Configuration data is now gzip-compressed before storing to DynamoDB, achieving 37-95x compression ratios. Supports 3,000+ document classes within the 400KB limit. Fully backward compatible with existing deployments. ([#200](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues/200), [#201](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/pull/201))
 - **Fixed Processing Flow chart using active stack config instead of the document's actual config version** for determining disabled steps (assessment, summarization, etc.)
+- **Fixed `idp_sdk` pip install from GitHub missing subpackages** — Non-editable pip installs of `idp_sdk` from GitHub were missing `core/`, `models/`, and `operations/` subpackages, causing `ModuleNotFoundError`. Fixed by explicitly declaring all subpackages in `pyproject.toml`, and switched to `setuptools.packages.find` auto-discovery for future-proofing. ([#196](https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/issues/196))
 
 ### Templates
    - us-west-2: `https://s3.us-west-2.amazonaws.com/aws-ml-blog-us-west-2/artifacts/genai-idp/idp-main_0.4.16.yaml`
