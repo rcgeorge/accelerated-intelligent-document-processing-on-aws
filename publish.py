@@ -2031,6 +2031,9 @@ STDERR:
                 "nested/bedrockkb/src",
                 "nested/bedrockkb/template.yaml",
             ],
+            "nested/alb-hosting": [
+                "nested/alb-hosting/template.yaml",
+            ],
             # Pattern components
             "patterns/pattern-1": [
                 LIB_DEPENDENCY,
