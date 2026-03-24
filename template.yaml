@@ -1425,6 +1425,7 @@ Resources:
         # DynamoDB Tables
         TrackingTableName: !Ref TrackingTable
         TrackingTableArn: !GetAtt TrackingTable.Arn
+        TrackingTableStreamArn: !GetAtt TrackingTable.StreamArn
         ConfigurationTableName: !Ref ConfigurationTable
         AgentTableName: !Ref AgentTable
         AgentTableArn: !GetAtt AgentTable.Arn

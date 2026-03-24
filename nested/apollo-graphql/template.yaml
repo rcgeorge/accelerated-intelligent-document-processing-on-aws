@@ -20,6 +20,9 @@ Parameters:
     Type: String
   TrackingTableArn:
     Type: String
+  TrackingTableStreamArn:
+    Type: String
+    Description: DynamoDB Stream ARN for the TrackingTable (required for WebSocket subscriptions)
   ConfigurationTableName:
     Type: String
   AgentTableName:
@@ -158,6 +161,7 @@ Conditions:
   HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
   HasGuardrail: !Equals [!Ref HasGuardrailConfig, "true"]
   HasTestExecutionAggregationFunction: !Not [!Equals [!Ref TestExecutionAggregationFunctionArn, ""]]
+  HasUsersTable: !Not [!Equals [!Ref UsersTableArn, ""]]
 
 Resources:
 
@@ -570,12 +574,12 @@ Resources:
                 - dynamodb:DescribeStream
                 - dynamodb:ListStreams
               Resource:
-                - !Sub "${TrackingTableArn}/stream/*"
+                - !Ref TrackingTableStreamArn
       Events:
         TrackingTableStream:
           Type: DynamoDB
           Properties:
-            Stream: !Sub "${TrackingTableArn}/stream/*"
+            Stream: !Ref TrackingTableStreamArn
             StartingPosition: LATEST
             BatchSize: 10
             MaximumBatchingWindowInSeconds: 1
@@ -657,7 +661,7 @@ Resources:
                 - cognito-idp:ListUsers
               Resource: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
         - !If
-          - !Not [!Equals [!Ref UsersTableArn, ""]]
+          - HasUsersTable
           - DynamoDBCrudPolicy:
               TableName: !Ref UsersTableName
           - !Ref AWS::NoValue
@@ -1753,7 +1757,7 @@ Resources:
                 - kms:DescribeKey
               Resource: !Ref CustomerManagedEncryptionKeyArn
         - !If
-          - !Not [!Equals [!Ref UsersTableArn, ""]]
+          - HasUsersTable
           - DynamoDBReadPolicy:
               TableName: !Ref UsersTableName
           - !Ref AWS::NoValue

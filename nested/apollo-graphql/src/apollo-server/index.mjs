@@ -7,7 +7,7 @@ import {
   handlers,
 } from '@as-integrations/aws-lambda';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DateTimeResolver,
@@ -21,8 +21,13 @@ import * as ddb from './dynamodb-datasource.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load schema
-const typeDefs = readFileSync(resolve(__dirname, '..', 'api', 'schema.graphql'), 'utf-8');
+// Load schema - check both locations (development: ../api/, packaged: ./schema.graphql)
+let typeDefs;
+try {
+  typeDefs = readFileSync(join(__dirname, 'schema.graphql'), 'utf-8');
+} catch {
+  typeDefs = readFileSync(resolve(__dirname, '..', 'api', 'schema.graphql'), 'utf-8');
+}
 
 // Table names from environment
 const TRACKING_TABLE = process.env.TRACKING_TABLE_NAME;
@@ -135,11 +140,51 @@ const resolvers = {
   },
 };
 
+// ── Auth Plugin ───────────────────────────────────────────────────────
+
+const authPlugin = {
+  async requestDidStart() {
+    return {
+      async didResolveOperation(requestContext) {
+        const { operation, contextValue } = requestContext;
+        const { identity } = contextValue;
+
+        if (!identity) {
+          throw new Error('Unauthorized: No identity found');
+        }
+
+        // If not API key auth and no groups/sub, reject
+        if (!identity.isApiKey && !identity.sub) {
+          throw new Error('Unauthorized: Invalid or missing authentication');
+        }
+
+        // Check field-level RBAC for each selection in the operation
+        const selections = operation.selectionSet?.selections || [];
+        for (const selection of selections) {
+          if (selection.kind !== 'Field') continue;
+          const fieldName = selection.name.value;
+
+          const { allowed, reason } = checkAccess(
+            fieldName,
+            identity.groups,
+            identity.isApiKey,
+          );
+
+          if (!allowed) {
+            throw new Error(`Forbidden: ${reason}`);
+          }
+        }
+      },
+    };
+  },
+};
+
 // ── Apollo Server ─────────────────────────────────────────────────────
 
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  plugins: [authPlugin],
   introspection: true,
 });
 
@@ -182,46 +227,3 @@ export const handler = startServerAndCreateLambdaHandler(
     },
   },
 );
-
-// ── Auth Plugin ───────────────────────────────────────────────────────
-// We inject RBAC checks as a plugin so they run before resolvers.
-
-const authPlugin = {
-  async requestDidStart() {
-    return {
-      async didResolveOperation(requestContext) {
-        const { operation, contextValue } = requestContext;
-        const { identity } = contextValue;
-
-        if (!identity) {
-          throw new Error('Unauthorized: No identity found');
-        }
-
-        // If not API key auth and no groups/sub, reject
-        if (!identity.isApiKey && !identity.sub) {
-          throw new Error('Unauthorized: Invalid or missing authentication');
-        }
-
-        // Check field-level RBAC for each selection in the operation
-        const selections = operation.selectionSet?.selections || [];
-        for (const selection of selections) {
-          if (selection.kind !== 'Field') continue;
-          const fieldName = selection.name.value;
-
-          const { allowed, reason } = checkAccess(
-            fieldName,
-            identity.groups,
-            identity.isApiKey,
-          );
-
-          if (!allowed) {
-            throw new Error(`Forbidden: ${reason}`);
-          }
-        }
-      },
-    };
-  },
-};
-
-// Add the auth plugin to the server
-server.addPlugin(authPlugin);
