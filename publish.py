@@ -1771,6 +1771,12 @@ STDERR:
             "nested/alb-hosting": [
                 "nested/alb-hosting/template.yaml",
             ],
+            "nested/apollo-graphql": [
+                LIB_DEPENDENCY,
+                "nested/apollo-graphql/src",
+                "nested/apollo-graphql/template.yaml",
+                "nested/appsync/src/lambda",
+            ],
             # Unified pattern (combines BDA + Pipeline)
             "patterns/unified": [
                 LIB_DEPENDENCY,

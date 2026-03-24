@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import { useState } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import {
   listConfigurationLibrary as listConfigurationLibraryOp,
@@ -23,7 +23,7 @@ interface UseConfigurationLibraryReturn {
   getFile: (pattern: string, configName: string, fileName: string) => Promise<{ content: string; contentType: string } | null>;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('useConfigurationLibrary');
 
 const useConfigurationLibrary = (): UseConfigurationLibraryReturn => {

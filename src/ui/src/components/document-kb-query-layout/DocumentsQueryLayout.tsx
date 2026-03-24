@@ -6,14 +6,14 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import { Box, Button, Spinner, Header, Grid, Container, SpaceBetween, Input, Link } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import { queryKnowledgeBase } from '../../graphql/generated';
 import { DOCUMENTS_PATH } from '../../routes/constants';
 import useSettingsContext from '../../contexts/settings';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('queryKnowledgeBase');
 
 interface ValueWithLabelProps {

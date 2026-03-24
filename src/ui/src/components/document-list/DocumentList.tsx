@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Table, Pagination, TextFilter, Box, SpaceBetween } from '@cloudscape-design/components';
 import { useCollection } from '@cloudscape-design/collection-hooks';
 import { ConsoleLogger } from 'aws-amplify/utils';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { useNavigate } from 'react-router-dom';
 
@@ -235,7 +235,7 @@ const DocumentList = (): React.JSX.Element => {
   };
 
   const handleClaimReview = async () => {
-    const client = generateClient();
+    const client = getClient();
     const selectedItems = collectionProps.selectedItems as MappedDocument[];
     const isSingleSelection = selectedItems.length === 1;
 
@@ -281,7 +281,7 @@ const DocumentList = (): React.JSX.Element => {
   };
 
   const handleReleaseReview = async () => {
-    const client = generateClient();
+    const client = getClient();
     for (const item of collectionProps.selectedItems as MappedDocument[]) {
       try {
         const result = await client.graphql({

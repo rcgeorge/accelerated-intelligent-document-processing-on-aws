@@ -18,7 +18,7 @@ import {
   ExpandableSection,
   Select,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import {
   addTestSet,
   addTestSetFromUpload,
@@ -29,7 +29,7 @@ import {
 } from '../../graphql/generated';
 import { getErrorMessage } from '../../utils/errorUtils';
 
-const client = generateClient();
+const client = getClient();
 
 // Constants
 const MAX_ZIP_SIZE_BYTES = 1073741824; // 1 GB

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Button, SpaceBetween } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -26,7 +26,7 @@ interface MarkdownReportProps {
   emptyMessage?: string;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('MarkdownViewer');
 
 // Default height for the simple mode

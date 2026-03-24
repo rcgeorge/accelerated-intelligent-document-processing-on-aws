@@ -27,7 +27,7 @@ import {
 import { useCollection } from '@cloudscape-design/collection-hooks';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import yaml from 'js-yaml';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { getTestRun, startTestRun, getTestSets } from '../../graphql/generated';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import TestStudioHeader from './TestStudioHeader';
@@ -44,7 +44,7 @@ import {
 } from '../../graphql/awsjson-parsers';
 import type { SelectProps } from '@cloudscape-design/components';
 
-const client = generateClient();
+const client = getClient();
 
 interface CostItem {
   context: string;

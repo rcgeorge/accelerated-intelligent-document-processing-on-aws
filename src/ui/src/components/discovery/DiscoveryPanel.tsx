@@ -28,7 +28,7 @@ import {
   CollectionPreferences,
 } from '@cloudscape-design/components';
 import type { SelectProps } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 
 import { uploadDiscoveryDocument, listDiscoveryJobs, onDiscoveryJobStatusChange, deleteDiscoveryJob, autoDetectSections } from '../../graphql/generated';
 import useSettingsContext from '../../contexts/settings';
@@ -39,7 +39,7 @@ import type { ConfigVersion } from '../test-studio/utils/configVersionUtils';
 import PdfPageSelector from './PdfPageSelector';
 import type { PageRange } from './PdfPageSelector';
 
-const client = generateClient();
+const client = getClient();
 
 interface UploadStatusItem {
   file: string;

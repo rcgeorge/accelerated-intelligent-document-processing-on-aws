@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import React, { useState, useRef } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Button, Container, SpaceBetween, FormField, Alert } from '@cloudscape-design/components';
 
@@ -25,7 +25,7 @@ interface ChatPanelProps {
   objectKey: string;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('chatWithDocument');
 
 const getChatResponse = async (s3Uri: string, prompt: string, history: ChatHistoryItem[]) => {

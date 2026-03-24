@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import type { SegmentedControlProps, ToggleProps } from '@cloudscape-design/components';
 import { Box, SpaceBetween, Button, Toggle, Alert, SegmentedControl } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
@@ -36,7 +36,7 @@ interface MarkdownJsonViewerProps {
   buttonText?: string;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('MarkdownJsonViewer');
 
 const EDITOR_DEFAULT_HEIGHT = '600px';

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { SpaceBetween, Box, Button, StatusIndicator } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import { copyToBaseline } from '../../graphql/generated';
@@ -46,7 +46,7 @@ interface DocumentViewersProps {
   evaluationStatus?: string;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('DocumentViewers');
 
 const ViewerControls = ({

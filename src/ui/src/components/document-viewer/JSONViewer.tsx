@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, Suspense, useEffect } from 'react';
 import { Box, Button, Spinner } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { getFileContents, uploadDocument } from '../../graphql/generated';
 
@@ -27,7 +27,7 @@ interface JSONViewerProps {
   isExternallyOpen?: boolean;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('JSONViewer');
 
 const JSONViewer = ({

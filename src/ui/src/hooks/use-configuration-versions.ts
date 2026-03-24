@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import {
   getConfigVersions,
@@ -14,7 +14,7 @@ import useConfiguration from './use-configuration';
 import useUserRole from './use-user-role';
 import type { ConfigVersion } from '../components/test-studio/utils/configVersionUtils';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('useConfigurationVersions');
 
 interface VersionOption {

@@ -398,6 +398,23 @@ Parameters:
     AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}(,\s*([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2})*$'
     ConstraintDescription: Must be valid comma-separated list of IPv4 CIDR ranges
 
+  DeploymentMode:
+    Type: String
+    Default: Standard
+    AllowedValues:
+      - Standard
+      - GovCloud
+    Description: >-
+      Standard uses AppSync for GraphQL. GovCloud uses Apollo Server +
+      API Gateway (for regions without AppSync). GovCloud forces ALB hosting.
+
+Rules:
+  GovCloudHostingValidation:
+    RuleCondition: !Equals [!Ref DeploymentMode, "GovCloud"]
+    Assertions:
+      - Assert: !Equals [!Ref WebUIHosting, "ALB"]
+        AssertDescription: "GovCloud deployment mode requires ALB hosting (WebUIHosting=ALB)."
+
 Conditions:
   HasGuardrailConfig:
     !And [
@@ -415,7 +432,9 @@ Conditions:
   ShouldCreateEvaluationBaselineBucket:
     !Equals [ !Ref EvaluationBaselineBucketName, "" ]
   ShouldCreateReportingBucket: !Equals [ !Ref ReportingBucketName, "" ]
-  IsWafEnabled: !Not [ !Equals [ !Ref WAFAllowedIPv4Ranges, "0.0.0.0/0" ] ]
+  IsWafEnabled: !And
+    - !Not [!Equals [!Ref WAFAllowedIPv4Ranges, "0.0.0.0/0"]]
+    - !Condition UseAppSync
   ShouldCreateDocumentKnowledgeBase:
     !Equals [ !Ref DocumentKnowledgeBase, "BEDROCK_KNOWLEDGE_BASE (Create)" ]
   ShouldUseDocumentKnowledgeBase: !Condition ShouldCreateDocumentKnowledgeBase
@@ -426,8 +445,15 @@ Conditions:
   IsS3VectorsVectorStore: !Equals [ !Ref KnowledgeBaseVectorStore, "S3_VECTORS" ]
   CreateAgentCoreLambda: !Equals [ !Ref EnableMCP, "true" ]
   CreateExternalAppClient: !Equals [ !Ref EnableMCP, "true" ]
-  UseCloudFrontHosting: !Equals [ !Ref WebUIHosting, "CloudFront" ]
-  UseALBHosting: !Equals [ !Ref WebUIHosting, "ALB" ]
+  IsGovCloud: !Equals [!Ref DeploymentMode, "GovCloud"]
+  UseAppSync: !Not [!Condition IsGovCloud]
+  UseApolloServer: !Condition IsGovCloud
+  UseCloudFrontHosting: !And
+    - !Not [!Condition IsGovCloud]
+    - !Equals [!Ref WebUIHosting, "CloudFront"]
+  UseALBHosting: !Or
+    - !Condition IsGovCloud
+    - !Equals [!Ref WebUIHosting, "ALB"]
 
 Metadata:
   cfn-lint:
@@ -834,7 +860,7 @@ Resources:
           LOOKUP_FUNCTION_NAME: !Ref LookupFunction
           STRANDS_LOG_LEVEL: !Ref LogLevel
           AGENT_TABLE: !Ref AgentTable
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_WORKGROUP: primary
           QUERY_RESULTS_BUCKET: !If
@@ -864,10 +890,13 @@ Resources:
             Effect: Allow
             Action: bedrock-agentcore:InvokeAgentRuntime
             Resource: "*"
-        - Statement:
-            Effect: Allow
-            Action: appsync:GraphQL
-            Resource: !Sub "arn:${AWS::Partition}:appsync:${AWS::Region}:${AWS::AccountId}:apis/${GraphQLApi.ApiId}/*"
+        - !If
+          - UseAppSync
+          - Statement:
+              Effect: Allow
+              Action: appsync:GraphQL
+              Resource: !Sub "arn:${AWS::Partition}:appsync:${AWS::Region}:${AWS::AccountId}:apis/${GraphQLApi.ApiId}/*"
+          - !Ref AWS::NoValue
         - DynamoDBCrudPolicy:
             TableName: !Ref ChatMessagesTable
         - DynamoDBCrudPolicy:
@@ -953,11 +982,14 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
               - !Ref AWS::NoValue
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -1242,8 +1274,8 @@ Resources:
         BedrockGuardrailVersion: !Ref BedrockGuardrailVersion
         UpdateConfigurationFunctionArn: !GetAtt UpdateConfigurationFunction.Arn
         ConfigurationTable: !Ref ConfigurationTable
-        AppSyncApiUrl: !GetAtt GraphQLApi.GraphQLUrl
-        AppSyncApiArn: !GetAtt GraphQLApi.Arn
+        AppSyncApiUrl: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+        AppSyncApiArn: !If [UseAppSync, !GetAtt GraphQLApi.Arn, ""]
         ConfigurationDefaultS3Uri: !If
           - HasCustomConfigPath
           - !Ref CustomConfigPath
@@ -1288,6 +1320,7 @@ Resources:
   APPSYNCSTACK:
     DependsOn:
       - IsStacknameLengthOK
+    Condition: UseAppSync
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: ./nested/appsync/.aws-sam/packaged.yaml
@@ -1374,7 +1407,90 @@ Resources:
         # User management (for config-version scoping)
         UsersTableName: !Ref UsersTable
         UsersTableArn: !GetAtt UsersTable.Arn
-        
+
+  ##########################################################################
+  # Apollo GraphQL Stack (GovCloud mode - replaces AppSync)
+  ##########################################################################
+  APOLLOGRAPHQLSTACK:
+    DependsOn:
+      - IsStacknameLengthOK
+    Condition: UseApolloServer
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./nested/apollo-graphql/.aws-sam/packaged.yaml
+      Parameters:
+        # Cognito resources
+        UserPoolId: !Ref UserPool
+        UserPoolClientId: !Ref UserPoolClient
+        # DynamoDB Tables
+        TrackingTableName: !Ref TrackingTable
+        TrackingTableArn: !GetAtt TrackingTable.Arn
+        ConfigurationTableName: !Ref ConfigurationTable
+        AgentTableName: !Ref AgentTable
+        AgentTableArn: !GetAtt AgentTable.Arn
+        ChatMessagesTableName: !Ref ChatMessagesTable
+        ChatSessionsTableName: !Ref ChatSessionsTable
+        ChatSessionsTableArn: !GetAtt ChatSessionsTable.Arn
+        IdHelperChatMemoryTableName: !Ref IdHelperChatMemoryTable
+        DiscoveryTrackingTableName: !Ref DiscoveryTrackingTable
+        DiscoveryTrackingTableArn: !GetAtt DiscoveryTrackingTable.Arn
+        UsersTableName: !Ref UsersTable
+        UsersTableArn: !GetAtt UsersTable.Arn
+        # S3 Buckets
+        InputBucketName: !Ref InputBucket
+        OutputBucketName: !Ref OutputBucket
+        ConfigurationBucketName: !Ref ConfigurationBucket
+        TestSetBucketName: !Ref TestSetBucket
+        EvaluationBaselineBucketName: !If
+          - ShouldCreateEvaluationBaselineBucket
+          - !Ref EvaluationBaselineBucket
+          - !Ref EvaluationBaselineBucketName
+        ReportingBucketName: !If
+          - ShouldCreateReportingBucket
+          - !Ref ReportingBucket
+          - !Ref ReportingBucketName
+        WorkingBucketName: !Ref WorkingBucket
+        DiscoveryBucketName: !Ref DiscoveryBucket
+        # SQS Queues
+        DocumentQueueUrl: !Ref DocumentQueue
+        DiscoveryQueueUrl: !Ref DiscoveryQueue
+        TestFileCopyQueueUrl: !Ref TestFileCopyQueue
+        TestSetFileCopyQueueUrl: !Ref TestSetFileCopyQueue
+        TestResultCacheUpdateQueueUrl: !Ref TestResultCacheUpdateQueue
+        TestResultCacheUpdateQueueArn: !GetAtt TestResultCacheUpdateQueue.Arn
+        DocumentQueueName: !GetAtt DocumentQueue.QueueName
+        DiscoveryQueueName: !GetAtt DiscoveryQueue.QueueName
+        TestFileCopyQueueName: !GetAtt TestFileCopyQueue.QueueName
+        TestSetFileCopyQueueName: !GetAtt TestSetFileCopyQueue.QueueName
+        TestResultCacheUpdateQueueName: !GetAtt TestResultCacheUpdateQueue.QueueName
+        # Background worker ARNs
+        AgentChatProcessorFunctionArn: !GetAtt AgentChatProcessorFunction.Arn
+        AgentProcessorFunctionArn: !GetAtt AgentProcessorFunction.Arn
+        TestExecutionAggregationFunctionArn: !GetAtt PATTERNSTACK.Outputs.TestExecutionAggregationFunctionArn
+        # Other resources
+        CustomerManagedEncryptionKeyArn: !GetAtt CustomerManagedEncryptionKey.Arn
+        ReportingDatabaseName: !Ref ReportingDatabase
+        LookupFunctionName: !Ref LookupFunction
+        SaveReportingFunctionName: !Ref SaveReportingDataFunctionV2
+        SettingsParameterName: !Ref SettingsParameter
+        # Configuration
+        StackName: !Ref AWS::StackName
+        LogRetentionDays: !Ref LogRetentionDays
+        LogLevel: !Ref LogLevel
+        DataRetentionInDays: !Ref DataRetentionInDays
+        PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
+        ExecutionTimeThresholdMs: !Ref ExecutionTimeThresholdMs
+        # Conditional parameters
+        HasGuardrailConfig: !If [HasGuardrailConfig, "true", "false"]
+        BedrockGuardrailId: !Ref BedrockGuardrailId
+        BedrockGuardrailVersion: !Ref BedrockGuardrailVersion
+        KnowledgeBaseModelId: !Ref KnowledgeBaseModelId
+        ShouldCreateEvaluationBaselineBucket: !If [ShouldCreateEvaluationBaselineBucket, "true", "false"]
+        ShouldCreateReportingBucket: !If [ShouldCreateReportingBucket, "true", "false"]
+        # Lambda Layers
+        IDPCommonBaseLayerArn: !Ref IDPCommonBaseLayer
+        IDPCommonAgentsLayerArn: !Ref IDPCommonAgentsLayer
+
   CustomerManagedEncryptionKey:
     DependsOn:
       - IsStacknameLengthOK
@@ -3076,6 +3192,10 @@ Resources:
               - FilesCount
               - Status
               - CompletedAt
+      StreamSpecification: !If
+        - UseApolloServer
+        - StreamViewType: NEW_AND_OLD_IMAGES
+        - !Ref AWS::NoValue
       TimeToLiveSpecification:
         AttributeName: ExpiresAfter
         Enabled: true
@@ -3674,7 +3794,7 @@ Resources:
         Variables:
           LOG_LEVEL: !Ref LogLevel
           QUEUE_URL: !Ref DocumentQueue
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
           OUTPUT_BUCKET: !Ref OutputBucket
           CONFIG_TABLE: !Ref ConfigurationTable
@@ -3686,11 +3806,14 @@ Resources:
         - S3ReadPolicy:
             BucketName: !Ref InputBucket
         - Statement:
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -3753,7 +3876,7 @@ Resources:
         Variables:
           LOG_LEVEL: !Ref LogLevel
           STATE_MACHINE_ARN: !GetAtt PATTERNSTACK.Outputs.StateMachineArn
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           MAX_CONCURRENT: !Ref MaxConcurrentWorkflows
           WORKING_BUCKET: !Ref WorkingBucket
@@ -3772,12 +3895,15 @@ Resources:
         - S3CrudPolicy:
             BucketName: !Ref WorkingBucket
         - Statement:
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Query/*"
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Query/*"
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -3873,7 +3999,7 @@ Resources:
           LOG_LEVEL: !Ref LogLevel
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           METRIC_NAMESPACE: !Ref AWS::StackName
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           OUTPUT_BUCKET: !Ref OutputBucket
           REPORTING_BUCKET:
             !If [
@@ -3899,11 +4025,14 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !GetAtt SaveReportingDataFunctionV2.Arn
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -4800,7 +4929,11 @@ Resources:
           MAX_CONVERSATION_TURNS: 20
           MAX_MESSAGE_SIZE_KB: 8.5
           DATA_RETENTION_DAYS: !Ref DataRetentionInDays
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
+            - UseApolloServer
+            - !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+            - ""
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_OUTPUT_LOCATION: !Sub
             - "s3://${Bucket}/athena-results/"
@@ -4824,10 +4957,20 @@ Resources:
             Effect: Allow
             Action: bedrock-agentcore:InvokeAgentRuntime
             Resource: "*"
-        - Statement:
-            Effect: Allow
-            Action: appsync:GraphQL
-            Resource: !Sub "arn:${AWS::Partition}:appsync:${AWS::Region}:${AWS::AccountId}:apis/${GraphQLApi.ApiId}/*"
+        - !If
+          - UseAppSync
+          - Statement:
+              Effect: Allow
+              Action: appsync:GraphQL
+              Resource: !Sub "arn:${AWS::Partition}:appsync:${AWS::Region}:${AWS::AccountId}:apis/${GraphQLApi.ApiId}/*"
+          - !Ref AWS::NoValue
+        - !If
+          - UseApolloServer
+          - Statement:
+              Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+          - !Ref AWS::NoValue
         - DynamoDBCrudPolicy:
             TableName: !Ref ChatMessagesTable
         - DynamoDBCrudPolicy:
@@ -4880,11 +5023,14 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
               - !Ref AWS::NoValue
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -5182,6 +5328,7 @@ Resources:
       RetentionInDays: !Ref LogRetentionDays
 
   CalculateCapacityDataSource:
+    Condition: UseAppSync
     Type: AWS::AppSync::DataSource
     Properties:
       ApiId: !GetAtt GraphQLApi.ApiId
@@ -5193,6 +5340,7 @@ Resources:
         LambdaFunctionArn: !GetAtt CalculateCapacityResolverFunction.Arn
 
   CalculateCapacityResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -5251,7 +5399,11 @@ Resources:
           LOOKUP_FUNCTION_NAME: !Ref LookupFunction
           STRANDS_LOG_LEVEL: !Ref LogLevel
           AGENT_TABLE: !Ref AgentTable
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
+            - UseApolloServer
+            - !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+            - ""
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_OUTPUT_LOCATION: !Sub
             - "s3://${Bucket}/athena-results/"
@@ -5321,11 +5473,14 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/${BedrockGuardrailId}"
               - !Ref AWS::NoValue
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -5703,16 +5858,19 @@ Resources:
                   - "ssm:GetParameter"
                 Resource:
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
-        - PolicyName: GraphQL
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - appsync:GraphQL
-                Resource:
-                  - !Sub "${GraphQLApi.Arn}/types/Query/*"
-                  - !Sub "${GraphQLApi.Arn}/types/Subscription/*"
+        - !If
+          - UseAppSync
+          - PolicyName: GraphQL
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - appsync:GraphQL
+                  Resource:
+                    - !Sub "${GraphQLApi.Arn}/types/Query/*"
+                    - !Sub "${GraphQLApi.Arn}/types/Subscription/*"
+          - !Ref AWS::NoValue
 
   AdminUser:
     Type: AWS::Cognito::UserPoolUser
@@ -5852,6 +6010,7 @@ Resources:
 
   GraphQLApi:
     Type: AWS::AppSync::GraphQLApi
+    Condition: UseAppSync
     # checkov:skip=CKV_AWS_194: AppSync has Field-Level logging is determined by LogLevel parameter
     Properties:
       Name: !Sub ${AWS::StackName}-api
@@ -5872,6 +6031,7 @@ Resources:
 
   GraphQLApiLogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: UseAppSync
     Properties:
       KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
       LogGroupName: !Sub "/aws/appsync/apis/${GraphQLApi.ApiId}"
@@ -5880,6 +6040,7 @@ Resources:
   AppSyncCwlRole:
     DependsOn:
       - IsStacknameLengthOK
+    Condition: UseAppSync
     Type: AWS::IAM::Role
     Properties:
       ManagedPolicyArns:
@@ -6521,7 +6682,7 @@ Resources:
           DISCOVERY_BUCKET: !Ref DiscoveryBucket
           DISCOVERY_TRACKING_TABLE: !Ref DiscoveryTrackingTable
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
-          APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
+          APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
       LoggingConfig:
         LogGroup: !Ref DiscoveryProcessorFunctionLogGroup
       Events:
@@ -6544,11 +6705,14 @@ Resources:
               Action:
                 - cloudwatch:PutMetricData
               Resource: "*"
-            - Effect: Allow
-              Action:
-                - appsync:GraphQL
-              Resource:
-                - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+            - !If
+              - UseAppSync
+              - Effect: Allow
+                Action:
+                  - appsync:GraphQL
+                Resource:
+                  - !Sub "${GraphQLApi.Arn}/types/Mutation/*"
+              - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - kms:Encrypt
@@ -6838,7 +7002,19 @@ Resources:
           - Name: VITE_IDENTITY_POOL_ID
             Value: !Ref IdentityPool
           - Name: VITE_APPSYNC_GRAPHQL_URL
-            Value: !GetAtt GraphQLApi.GraphQLUrl
+            Value: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          - Name: VITE_DEPLOYMENT_MODE
+            Value: !Ref DeploymentMode
+          - Name: VITE_GRAPHQL_HTTP_URL
+            Value: !If
+              - UseApolloServer
+              - !Sub "${APOLLOGRAPHQLSTACK.Outputs.HttpApiUrl}/graphql"
+              - ""
+          - Name: VITE_GRAPHQL_WS_URL
+            Value: !If
+              - UseApolloServer
+              - !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketApiUrl
+              - ""
           - Name: VITE_AWS_REGION
             Value: !Ref AWS::Region
           - Name: VITE_SHOULD_HIDE_SIGN_UP
@@ -7147,6 +7323,7 @@ Resources:
               Resource: !GetAtt CustomerManagedEncryptionKey.Arn
 
   HITLAppSyncServiceRole:
+    Condition: UseAppSync
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -7170,6 +7347,7 @@ Resources:
                   - !GetAtt CalculateCapacityResolverFunction.Arn
 
   UserManagementDataSource:
+    Condition: UseAppSync
     Type: AWS::AppSync::DataSource
     Properties:
       ApiId: !GetAtt GraphQLApi.ApiId
@@ -7180,6 +7358,7 @@ Resources:
         LambdaFunctionArn: !GetAtt UserManagementFunction.Arn
 
   CreateUserResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7189,6 +7368,7 @@ Resources:
       FieldName: createUser
 
   DeleteUserResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7198,6 +7378,7 @@ Resources:
       FieldName: deleteUser
 
   ListUsersResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7207,6 +7388,7 @@ Resources:
       FieldName: listUsers
 
   UpdateUserResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7216,6 +7398,7 @@ Resources:
       FieldName: updateUser
 
   GetMyProfileResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7225,6 +7408,7 @@ Resources:
       FieldName: getMyProfile
 
   CompleteSectionReviewDataSource:
+    Condition: UseAppSync
     Type: AWS::AppSync::DataSource
     Properties:
       ApiId: !GetAtt GraphQLApi.ApiId
@@ -7235,6 +7419,7 @@ Resources:
         LambdaFunctionArn: !GetAtt CompleteSectionReviewFunction.Arn
 
   CompleteSectionReviewResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7244,6 +7429,7 @@ Resources:
       FieldName: completeSectionReview
 
   SkipAllSectionsReviewResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7253,6 +7439,7 @@ Resources:
       FieldName: skipAllSectionsReview
 
   ClaimReviewResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7262,6 +7449,7 @@ Resources:
       FieldName: claimReview
 
   ReleaseReviewResolver:
+    Condition: UseAppSync
     Type: AWS::AppSync::Resolver
     DependsOn: APPSYNCSTACK
     Properties:
@@ -7404,7 +7592,7 @@ Outputs:
       VITE_USER_POOL_ID=${UserPool}
       VITE_USER_POOL_CLIENT_ID=${UserPoolClient}
       VITE_IDENTITY_POOL_ID=${IdentityPool}
-      VITE_APPSYNC_GRAPHQL_URL=${GraphQLApi.GraphQLUrl}
+      VITE_APPSYNC_GRAPHQL_URL=${AppSyncUrl}
       VITE_AWS_REGION=${AWS::Region}
       VITE_SETTINGS_PARAMETER=${SettingsParameter}
       VITE_TEST_SET_BUCKET_NAME=${TestSetBucket}

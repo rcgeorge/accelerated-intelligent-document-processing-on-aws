@@ -3,13 +3,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Modal, Box, SpaceBetween, Button, SegmentedControl, Alert, Spinner } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Editor } from '@monaco-editor/react';
 import MarkdownViewer from '../document-viewer/MarkdownViewer';
 import { getFileContents, uploadDocument } from '../../graphql/generated';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('PageTextEditorModal');
 
 const EDITOR_HEIGHT = '600px';

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import type { SelectProps, IconProps } from '@cloudscape-design/components';
 import { Container, Header, SpaceBetween, Button, FormField, Select, Alert, Textarea, Input } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { startTestRun, getTestSets } from '../../graphql/generated';
 import handlePrint from './PrintUtils';
@@ -13,7 +13,7 @@ import { getErrorMessage } from '../../utils/errorUtils';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GqlResult = { data: Record<string, any> };
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('TestRunner');
 
 interface ActiveTestRun {

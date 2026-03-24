@@ -19,7 +19,7 @@ import {
   Alert,
 } from '@cloudscape-design/components';
 import type { ButtonDropdownProps } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import FileViewer from '../document-viewer/JSONViewer';
@@ -30,7 +30,7 @@ import useUserRole from '../../hooks/use-user-role';
 import { processChanges, getFileContents, skipAllSectionsReview } from '../../graphql/generated';
 import { parseHITLReviewHistory } from '../../graphql/awsjson-parsers';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('SectionsPanel');
 
 interface SectionItem {

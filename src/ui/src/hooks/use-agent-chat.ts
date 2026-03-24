@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import { sendAgentChatMessage, onAgentChatMessageUpdate, getChatMessages } from '../graphql/generated';
@@ -9,7 +9,7 @@ import { useAgentChatContext } from '../contexts/agentChat';
 import type { ChatMessage } from '../types/agent-chat';
 
 const logger = new ConsoleLogger('useAgentChat');
-const client = generateClient();
+const client = getClient();
 
 interface AgentChatConfig {
   agentType: string;

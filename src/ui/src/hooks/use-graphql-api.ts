@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import useAppContext from '../contexts/app';
@@ -19,7 +19,7 @@ import {
 import { DOCUMENT_LIST_SHARDS_PER_DAY } from '../components/document-list/documents-table-config';
 import { Document } from '../types/documents';
 
-const client = generateClient();
+const client = getClient();
 
 const logger = new ConsoleLogger('useGraphQlApi');
 

@@ -16,7 +16,7 @@ import {
   Select,
 } from '@cloudscape-design/components';
 import type { SelectProps } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 
 import { uploadDocument } from '../../graphql/generated';
 
@@ -24,7 +24,7 @@ import useConfigurationVersions from '../../hooks/use-configuration-versions';
 
 import useSettingsContext from '../../contexts/settings';
 
-const client = generateClient();
+const client = getClient();
 
 interface UploadStatusItem {
   file: string;

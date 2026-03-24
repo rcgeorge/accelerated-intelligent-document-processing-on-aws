@@ -6,8 +6,15 @@ Complete GovCloud template generation and publication script.
 This script orchestrates the complete GovCloud-compatible build process:
 1. Runs the standard publish.py script to build all artifacts
 2. Generates a GovCloud-compatible template that excludes unsupported services
-3. Uploads the GovCloud template to S3 alongside the main template  
+3. Uploads the GovCloud template to S3 alongside the main template
 4. Provides deployment URLs and instructions for both templates
+
+NOTE: For GovCloud deployments WITH a web UI, consider using the standard
+template with DeploymentMode=GovCloud parameter instead of this script.
+The DeploymentMode=GovCloud option replaces AppSync with Apollo Server +
+API Gateway while keeping the full UI stack (via ALB hosting).
+
+This script remains useful for headless (no UI) GovCloud deployments.
 
 Usage:
     python scripts/generate_govcloud_template.py <cfn_bucket_basename> <cfn_prefix> <region> [public] [options]

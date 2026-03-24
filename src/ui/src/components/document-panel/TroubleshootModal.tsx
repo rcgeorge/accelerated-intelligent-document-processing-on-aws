@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import React, { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Modal, Box, SpaceBetween, Button, Spinner, Alert, Header } from '@cloudscape-design/components';
 
@@ -53,7 +53,7 @@ interface Subscription {
   unsubscribe: () => void;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('TroubleshootModal');
 
 const TroubleshootModal = ({

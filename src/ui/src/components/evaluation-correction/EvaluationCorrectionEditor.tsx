@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Box, SpaceBetween, Container, Header, Spinner, Button, Alert } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import PageImageViewer from '../common/PageImageViewer';
@@ -12,7 +12,7 @@ import CorrectionDeltaPanel from './CorrectionDeltaPanel';
 import { getFileContents } from '../../graphql/generated';
 import useSettingsContext from '../../contexts/settings';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('EvaluationCorrectionEditor');
 
 interface Correction {

@@ -20,7 +20,7 @@ import {
   Alert,
   Tabs,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import useAppContext from '../../contexts/app';
@@ -45,7 +45,7 @@ interface BoundingBoxDimensions {
 }
 
 
-const client = generateClient();
+const client = getClient();
 
 const logger = new ConsoleLogger('VisualEditorModal');
 

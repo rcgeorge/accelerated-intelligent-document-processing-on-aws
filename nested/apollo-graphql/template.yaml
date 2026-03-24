@@ -1,0 +1,1780 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: AWS GenAI IDP Accelerator - Apollo GraphQL Nested Stack (GovCloud)
+
+Parameters:
+  # Cognito resources (from main template)
+  UserPoolId:
+    Type: String
+    Description: Cognito User Pool ID for JWT authorization
+
+  UserPoolClientId:
+    Type: String
+    Description: Cognito User Pool Client ID for JWT audience validation
+
+  # DynamoDB Tables
+  TrackingTableName:
+    Type: String
+  TrackingTableArn:
+    Type: String
+  ConfigurationTableName:
+    Type: String
+  AgentTableName:
+    Type: String
+  AgentTableArn:
+    Type: String
+  ChatMessagesTableName:
+    Type: String
+  ChatSessionsTableName:
+    Type: String
+  ChatSessionsTableArn:
+    Type: String
+  IdHelperChatMemoryTableName:
+    Type: String
+  DiscoveryTrackingTableName:
+    Type: String
+  DiscoveryTrackingTableArn:
+    Type: String
+  UsersTableName:
+    Type: String
+    Default: ""
+  UsersTableArn:
+    Type: String
+    Default: ""
+
+  # S3 Buckets
+  InputBucketName:
+    Type: String
+  OutputBucketName:
+    Type: String
+  ConfigurationBucketName:
+    Type: String
+  TestSetBucketName:
+    Type: String
+  EvaluationBaselineBucketName:
+    Type: String
+  ReportingBucketName:
+    Type: String
+  WorkingBucketName:
+    Type: String
+  DiscoveryBucketName:
+    Type: String
+
+  # SQS Queues
+  DocumentQueueUrl:
+    Type: String
+  DiscoveryQueueUrl:
+    Type: String
+  TestFileCopyQueueUrl:
+    Type: String
+  TestSetFileCopyQueueUrl:
+    Type: String
+  TestResultCacheUpdateQueueUrl:
+    Type: String
+  TestResultCacheUpdateQueueArn:
+    Type: String
+
+  # SQS Queue Names (for IAM policies)
+  DocumentQueueName:
+    Type: String
+  DiscoveryQueueName:
+    Type: String
+  TestFileCopyQueueName:
+    Type: String
+  TestSetFileCopyQueueName:
+    Type: String
+  TestResultCacheUpdateQueueName:
+    Type: String
+
+  # Background worker ARNs
+  AgentChatProcessorFunctionArn:
+    Type: String
+  AgentProcessorFunctionArn:
+    Type: String
+  TestExecutionAggregationFunctionArn:
+    Type: String
+    Default: ""
+
+  # Other resources
+  CustomerManagedEncryptionKeyArn:
+    Type: String
+  ReportingDatabaseName:
+    Type: String
+  LookupFunctionName:
+    Type: String
+  SaveReportingFunctionName:
+    Type: String
+  SettingsParameterName:
+    Type: String
+
+  # Configuration
+  StackName:
+    Type: String
+  LogRetentionDays:
+    Type: Number
+  LogLevel:
+    Type: String
+  DataRetentionInDays:
+    Type: Number
+  PermissionsBoundaryArn:
+    Type: String
+  ExecutionTimeThresholdMs:
+    Type: Number
+
+  # Conditional parameters
+  HasGuardrailConfig:
+    Type: String
+    AllowedValues: ["true", "false"]
+  BedrockGuardrailId:
+    Type: String
+  BedrockGuardrailVersion:
+    Type: String
+  KnowledgeBaseModelId:
+    Type: String
+  ShouldCreateEvaluationBaselineBucket:
+    Type: String
+    AllowedValues: ["true", "false"]
+  ShouldCreateReportingBucket:
+    Type: String
+    AllowedValues: ["true", "false"]
+
+  # Lambda Layers from main template
+  IDPCommonBaseLayerArn:
+    Type: String
+  IDPCommonAgentsLayerArn:
+    Type: String
+
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W1030
+        - W1031
+
+Conditions:
+  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  HasGuardrail: !Equals [!Ref HasGuardrailConfig, "true"]
+  HasTestExecutionAggregationFunction: !Not [!Equals [!Ref TestExecutionAggregationFunctionArn, ""]]
+
+Resources:
+
+  ##########################################################################
+  # Backend API Key (for IAM-equivalent auth from backend Lambdas)
+  ##########################################################################
+  BackendApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${StackName}-apollo-backend-api-key"
+      Description: API key for backend Lambda access to Apollo GraphQL
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: apiKey
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\'
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+
+  ##########################################################################
+  # API Gateway HTTP API (for GraphQL queries/mutations)
+  ##########################################################################
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${StackName}-graphql-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: ["POST", "OPTIONS"]
+        AllowHeaders: ["Content-Type", "Authorization", "x-api-key"]
+        MaxAge: 86400
+
+  HttpApiJwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource: "$request.header.Authorization"
+      Name: CognitoJwtAuthorizer
+      JwtConfiguration:
+        Audience:
+          - !Ref UserPoolClientId
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${UserPoolId}"
+
+  # Route for Cognito-authenticated requests
+  HttpApiGraphQLRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /graphql"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiJwtAuthorizer
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  # Route for backend (API key) requests — no JWT authorizer
+  HttpApiBackendRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /graphql/backend"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApolloServerFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  ApolloServerFunctionHttpPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApolloServerFunction
+      Action: lambda:InvokeFunction
+      Principal: !Sub "apigateway.${AWS::URLSuffix}"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+  ##########################################################################
+  # Apollo Server Lambda Function
+  ##########################################################################
+  ApolloServerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ApolloServerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-server"
+      Handler: index.handler
+      Runtime: nodejs22.x
+      CodeUri: ./src/apollo-server/
+      MemorySize: 512
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref ApolloServerFunctionLogGroup
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          # DynamoDB table names
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
+          AGENT_TABLE_NAME: !Ref AgentTableName
+          CHAT_SESSIONS_TABLE_NAME: !Ref ChatSessionsTableName
+          DISCOVERY_TABLE_NAME: !Ref DiscoveryTrackingTableName
+          # Backend API key from Secrets Manager
+          BACKEND_API_KEY: !Sub "{{resolve:secretsmanager:${BackendApiKeySecret}:SecretString:apiKey}}"
+          # Lambda function ARNs for resolver invocation
+          LIST_DOCUMENTS_GSI_FUNCTION_ARN: !GetAtt ListDocumentsGSIResolverFunction.Arn
+          LIST_DOCUMENTS_RANGE_FUNCTION_ARN: !GetAtt ListDocumentsByDateRangeResolverFunction.Arn
+          GET_FILE_CONTENTS_FUNCTION_ARN: !GetAtt GetFileContentsResolverFunction.Arn
+          GET_STEPFUNCTION_EXECUTION_FUNCTION_ARN: !GetAtt GetStepFunctionExecutionResolverFunction.Arn
+          CONFIGURATION_FUNCTION_ARN: !GetAtt ConfigurationResolverFunction.Arn
+          LIST_AVAILABLE_AGENTS_FUNCTION_ARN: !GetAtt ListAvailableAgentsFunction.Arn
+          GET_AGENT_CHAT_MESSAGES_FUNCTION_ARN: !GetAtt GetAgentChatMessagesFunction.Arn
+          LIST_AGENT_CHAT_SESSIONS_FUNCTION_ARN: !GetAtt ListAgentChatSessionsFunction.Arn
+          QUERY_KNOWLEDGEBASE_FUNCTION_ARN: !GetAtt QueryKnowledgeBaseResolverFunction.Arn
+          CHAT_WITH_DOCUMENT_FUNCTION_ARN: !GetAtt ChatWithDocumentResolverFunction.Arn
+          DISCOVERY_UPLOAD_FUNCTION_ARN: !GetAtt DiscoveryUploadResolverFunction.Arn
+          AGENT_REQUEST_HANDLER_FUNCTION_ARN: !GetAtt AgentRequestHandlerFunction.Arn
+          TEST_RESULTS_FUNCTION_ARN: !GetAtt TestResultsResolverFunction.Arn
+          TEST_SET_FUNCTION_ARN: !GetAtt TestSetResolverFunction.Arn
+          TEST_RUNNER_FUNCTION_ARN: !GetAtt TestRunnerFunction.Arn
+          UPLOAD_FUNCTION_ARN: !GetAtt UploadResolverFunction.Arn
+          COPY_TO_BASELINE_FUNCTION_ARN: !GetAtt CopyToBaselineResolverFunction.Arn
+          CREATE_DOCUMENT_FUNCTION_ARN: !GetAtt CreateDocumentResolverFunction.Arn
+          DELETE_DOCUMENT_FUNCTION_ARN: !GetAtt DeleteDocumentResolverFunction.Arn
+          DELETE_TESTS_FUNCTION_ARN: !GetAtt DeleteTestsResolverFunction.Arn
+          REPROCESS_DOCUMENT_FUNCTION_ARN: !GetAtt ReprocessDocumentResolverFunction.Arn
+          ABORT_WORKFLOW_FUNCTION_ARN: !GetAtt AbortWorkflowResolverFunction.Arn
+          AGENT_CHAT_FUNCTION_ARN: !GetAtt AgentChatResolverFunction.Arn
+          DELETE_AGENT_CHAT_SESSION_FUNCTION_ARN: !GetAtt DeleteAgentChatSessionFunction.Arn
+          PROCESS_CHANGES_FUNCTION_ARN: !GetAtt ProcessChangesResolverFunction.Arn
+          SYNC_BDA_IDP_FUNCTION_ARN: !GetAtt SyncBdaIdpResolverFunction.Arn
+      Policies:
+        # DynamoDB access for direct resolvers
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatSessionsTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DiscoveryTrackingTableName
+        # KMS access
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+        # Lambda invoke permissions for all resolver functions
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !GetAtt ListDocumentsGSIResolverFunction.Arn
+                - !GetAtt ListDocumentsByDateRangeResolverFunction.Arn
+                - !GetAtt GetFileContentsResolverFunction.Arn
+                - !GetAtt GetStepFunctionExecutionResolverFunction.Arn
+                - !GetAtt ConfigurationResolverFunction.Arn
+                - !GetAtt ListAvailableAgentsFunction.Arn
+                - !GetAtt GetAgentChatMessagesFunction.Arn
+                - !GetAtt ListAgentChatSessionsFunction.Arn
+                - !GetAtt QueryKnowledgeBaseResolverFunction.Arn
+                - !GetAtt ChatWithDocumentResolverFunction.Arn
+                - !GetAtt DiscoveryUploadResolverFunction.Arn
+                - !GetAtt AgentRequestHandlerFunction.Arn
+                - !GetAtt TestResultsResolverFunction.Arn
+                - !GetAtt TestSetResolverFunction.Arn
+                - !GetAtt TestRunnerFunction.Arn
+                - !GetAtt UploadResolverFunction.Arn
+                - !GetAtt CopyToBaselineResolverFunction.Arn
+                - !GetAtt CreateDocumentResolverFunction.Arn
+                - !GetAtt DeleteDocumentResolverFunction.Arn
+                - !GetAtt DeleteTestsResolverFunction.Arn
+                - !GetAtt ReprocessDocumentResolverFunction.Arn
+                - !GetAtt AbortWorkflowResolverFunction.Arn
+                - !GetAtt AgentChatResolverFunction.Arn
+                - !GetAtt DeleteAgentChatSessionFunction.Arn
+                - !GetAtt ProcessChangesResolverFunction.Arn
+                - !GetAtt SyncBdaIdpResolverFunction.Arn
+        # Secrets Manager access for API key
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref BackendApiKeySecret
+
+  ##########################################################################
+  # WebSocket API (for GraphQL subscriptions)
+  ##########################################################################
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${StackName}-graphql-ws"
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  WebSocketConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$connect"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${WebSocketIntegration}"
+
+  WebSocketDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$disconnect"
+      Target: !Sub "integrations/${WebSocketIntegration}"
+
+  WebSocketSubscribeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "subscribe"
+      Target: !Sub "integrations/${WebSocketIntegration}"
+
+  WebSocketUnsubscribeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "unsubscribe"
+      Target: !Sub "integrations/${WebSocketIntegration}"
+
+  WebSocketDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${WebSocketIntegration}"
+
+  WebSocketIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketManagerFunction.Arn}/invocations"
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: "prod"
+      AutoDeploy: true
+
+  WebSocketManagerFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketManagerFunction
+      Action: lambda:InvokeFunction
+      Principal: !Sub "apigateway.${AWS::URLSuffix}"
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+
+  ##########################################################################
+  # WebSocket Connections DynamoDB Table
+  ##########################################################################
+  WebSocketConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${StackName}-ws-connections"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref CustomerManagedEncryptionKeyArn
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: topic
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: TopicIndex
+          KeySchema:
+            - AttributeName: topic
+              KeyType: HASH
+            - AttributeName: connectionId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  ##########################################################################
+  # WebSocket Manager Lambda (connect/disconnect/subscribe/unsubscribe)
+  ##########################################################################
+  WebSocketManagerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  WebSocketManagerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-ws-manager"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/websocket-manager/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref WebSocketManagerFunctionLogGroup
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: !Ref WebSocketConnectionsTable
+          USER_POOL_ID: !Ref UserPoolId
+          USER_POOL_CLIENT_ID: !Ref UserPoolClientId
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebSocketConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+        - Statement:
+            - Effect: Allow
+              Action: cognito-idp:GetUser
+              Resource: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
+
+  ##########################################################################
+  # WebSocket Publisher Lambda (DynamoDB Streams → WebSocket push)
+  ##########################################################################
+  WebSocketPublisherFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  WebSocketPublisherFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-ws-publisher"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/websocket-publisher/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref WebSocketPublisherFunctionLogGroup
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: !Ref WebSocketConnectionsTable
+          WEBSOCKET_API_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod"
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebSocketConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/prod/POST/@connections/*"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:DescribeStream
+                - dynamodb:ListStreams
+              Resource:
+                - !Sub "${TrackingTableArn}/stream/*"
+      Events:
+        TrackingTableStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Sub "${TrackingTableArn}/stream/*"
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT", "MODIFY"]}'
+
+  ##########################################################################
+  # Resolver Lambda Functions
+  # These are the same Lambda functions as in the AppSync nested stack.
+  # They receive events in AppSync Lambda resolver format:
+  #   { arguments: {...}, identity: { claims: {...} } }
+  ##########################################################################
+
+  # NOTE: The resolver Lambda functions below are identical to those in
+  # nested/appsync/template.yaml. In a production implementation, these
+  # would be shared or the source code would be symlinked. For this
+  # implementation, we reference the same source directories.
+
+  # ── Resolver Functions (same source as AppSync stack) ─────────────────
+
+  ConfigurationResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ConfigurationResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-config-resolver"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/configuration_resolver/
+      MemorySize: 256
+      Timeout: 30
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref ConfigurationResolverFunctionLogGroup
+      Environment:
+        Variables:
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          CONFIGURATION_BUCKET_NAME: !Ref ConfigurationBucketName
+          SETTINGS_PARAMETER_NAME: !Ref SettingsParameterName
+          STACK_NAME: !Ref StackName
+          LOG_LEVEL: !Ref LogLevel
+          USERS_TABLE_NAME: !Ref UsersTableName
+          USER_POOL_ID: !Ref UserPoolId
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTableName
+        - S3CrudPolicy:
+            BucketName: !Ref ConfigurationBucketName
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref SettingsParameterName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminDeleteUser
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminRemoveUserFromGroup
+                - cognito-idp:ListUsers
+              Resource: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
+        - !If
+          - !Not [!Equals [!Ref UsersTableArn, ""]]
+          - DynamoDBCrudPolicy:
+              TableName: !Ref UsersTableName
+          - !Ref AWS::NoValue
+
+  UploadResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  UploadResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-upload-resolver"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/upload_resolver/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref UploadResolverFunctionLogGroup
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref InputBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  GetFileContentsResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetFileContentsResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-file-contents"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/get_file_contents_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref GetFileContentsResolverFunctionLogGroup
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref OutputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref WorkingBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref EvaluationBaselineBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref ReportingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  GetStepFunctionExecutionResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetStepFunctionExecutionResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-sfn-execution"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/get_stepfunction_execution_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref GetStepFunctionExecutionResolverFunctionLogGroup
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:DescribeExecution
+                - states:GetExecutionHistory
+              Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:*"
+
+  CopyToBaselineResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  CopyToBaselineResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-copy-baseline"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/copy_to_baseline_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref CopyToBaselineResolverFunctionLogGroup
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: !Ref OutputBucketName
+          EVALUATION_BASELINE_BUCKET: !Ref EvaluationBaselineBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref OutputBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref EvaluationBaselineBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  CreateDocumentResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  CreateDocumentResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-create-doc"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/create_document_resolver/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref CreateDocumentResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          LOG_LEVEL: !Ref LogLevel
+          DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  DeleteDocumentResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DeleteDocumentResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-delete-doc"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/delete_document_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref DeleteDocumentResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          INPUT_BUCKET: !Ref InputBucketName
+          OUTPUT_BUCKET: !Ref OutputBucketName
+          WORKING_BUCKET: !Ref WorkingBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - S3CrudPolicy:
+            BucketName: !Ref InputBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref OutputBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ReprocessDocumentResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ReprocessDocumentResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-reprocess-doc"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/reprocess_document_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref ReprocessDocumentResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          DOCUMENT_QUEUE_URL: !Ref DocumentQueueUrl
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - SQSSendMessagePolicy:
+            QueueName: !Ref DocumentQueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  AbortWorkflowResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  AbortWorkflowResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-abort-wf"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/abort_workflow_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref AbortWorkflowResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StopExecution
+              Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ProcessChangesResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ProcessChangesResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-process-chg"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/process_changes_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref ProcessChangesResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          DOCUMENT_QUEUE_URL: !Ref DocumentQueueUrl
+          WORKING_BUCKET: !Ref WorkingBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - SQSSendMessagePolicy:
+            QueueName: !Ref DocumentQueueName
+        - S3CrudPolicy:
+            BucketName: !Ref WorkingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  AgentChatResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  AgentChatResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-agent-chat"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/agent_chat_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref AgentChatResolverFunctionLogGroup
+      Environment:
+        Variables:
+          CHAT_MESSAGES_TABLE: !Ref ChatMessagesTableName
+          CHAT_SESSIONS_TABLE: !Ref ChatSessionsTableName
+          AGENT_CHAT_PROCESSOR_FUNCTION_ARN: !Ref AgentChatProcessorFunctionArn
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatMessagesTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatSessionsTableName
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Ref AgentChatProcessorFunctionArn
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  DeleteAgentChatSessionFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DeleteAgentChatSessionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-del-chat-sess"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/delete_agent_chat_session_resolver/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref DeleteAgentChatSessionFunctionLogGroup
+      Environment:
+        Variables:
+          CHAT_MESSAGES_TABLE: !Ref ChatMessagesTableName
+          CHAT_SESSIONS_TABLE: !Ref ChatSessionsTableName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatMessagesTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatSessionsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ListAvailableAgentsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListAvailableAgentsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-list-agents"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/list_available_agents/
+      MemorySize: 256
+      Timeout: 10
+      Layers:
+        - !Ref IDPCommonAgentsLayerArn
+      LoggingConfig:
+        LogGroup: !Ref ListAvailableAgentsFunctionLogGroup
+      Environment:
+        Variables:
+          SETTINGS_PARAMETER_NAME: !Ref SettingsParameterName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref SettingsParameterName
+
+  GetAgentChatMessagesFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetAgentChatMessagesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-get-chat-msgs"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/get_agent_chat_messages_resolver/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref GetAgentChatMessagesFunctionLogGroup
+      Environment:
+        Variables:
+          CHAT_MESSAGES_TABLE: !Ref ChatMessagesTableName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ChatMessagesTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ListAgentChatSessionsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListAgentChatSessionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-list-sessions"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/list_agent_chat_sessions_resolver/
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref ListAgentChatSessionsFunctionLogGroup
+      Environment:
+        Variables:
+          CHAT_SESSIONS_TABLE: !Ref ChatSessionsTableName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ChatSessionsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  QueryKnowledgeBaseResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  QueryKnowledgeBaseResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-query-kb"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/query_knowledgebase_resolver/
+      MemorySize: 256
+      Timeout: 60
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref QueryKnowledgeBaseResolverFunctionLogGroup
+      Environment:
+        Variables:
+          SETTINGS_PARAMETER_NAME: !Ref SettingsParameterName
+          KNOWLEDGE_BASE_MODEL_ID: !Ref KnowledgeBaseModelId
+          GUARDRAIL_ID_AND_VERSION: !If [HasGuardrail, !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}", ""]
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref SettingsParameterName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Retrieve
+                - bedrock:RetrieveAndGenerate
+              Resource: "*"
+
+  ChatWithDocumentResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ChatWithDocumentResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-chat-doc"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/chat_with_document_resolver/
+      MemorySize: 256
+      Timeout: 60
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref ChatWithDocumentResolverFunctionLogGroup
+      Environment:
+        Variables:
+          GUARDRAIL_ID_AND_VERSION: !If [HasGuardrail, !Sub "${BedrockGuardrailId}:${BedrockGuardrailVersion}", ""]
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref OutputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref WorkingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  DiscoveryUploadResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DiscoveryUploadResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-discovery"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/discovery_upload_resolver/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref DiscoveryUploadResolverFunctionLogGroup
+      Environment:
+        Variables:
+          DISCOVERY_BUCKET: !Ref DiscoveryBucketName
+          DISCOVERY_TABLE: !Ref DiscoveryTrackingTableName
+          DISCOVERY_QUEUE_URL: !Ref DiscoveryQueueUrl
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DiscoveryTrackingTableName
+        - S3CrudPolicy:
+            BucketName: !Ref DiscoveryBucketName
+        - SQSSendMessagePolicy:
+            QueueName: !Ref DiscoveryQueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  AgentRequestHandlerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  AgentRequestHandlerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-agent-handler"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/agent_request_handler/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref AgentRequestHandlerFunctionLogGroup
+      Environment:
+        Variables:
+          AGENT_TABLE: !Ref AgentTableName
+          AGENT_PROCESSOR_FUNCTION_ARN: !Ref AgentProcessorFunctionArn
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentTableName
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Ref AgentProcessorFunctionArn
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  TestResultsResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  TestResultsResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-test-results"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/test_results_resolver/
+      MemorySize: 256
+      Timeout: 30
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref TestResultsResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          REPORTING_BUCKET: !Ref ReportingBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TrackingTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTableName
+        - S3ReadPolicy:
+            BucketName: !Ref ReportingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  TestRunnerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  TestRunnerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-test-runner"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/test_runner/
+      MemorySize: 256
+      Timeout: 60
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref TestRunnerFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          INPUT_BUCKET: !Ref InputBucketName
+          TEST_SET_BUCKET: !Ref TestSetBucketName
+          TEST_FILE_COPY_QUEUE_URL: !Ref TestFileCopyQueueUrl
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTableName
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucketName
+        - S3ReadPolicy:
+            BucketName: !Ref TestSetBucketName
+        - SQSSendMessagePolicy:
+            QueueName: !Ref TestFileCopyQueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  TestSetResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  TestSetResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-test-set"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/test_set_resolver/
+      MemorySize: 256
+      Timeout: 30
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref TestSetResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          INPUT_BUCKET: !Ref InputBucketName
+          TEST_SET_BUCKET: !Ref TestSetBucketName
+          TEST_SET_FILE_COPY_QUEUE_URL: !Ref TestSetFileCopyQueueUrl
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref TestSetBucketName
+        - SQSSendMessagePolicy:
+            QueueName: !Ref TestSetFileCopyQueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  DeleteTestsResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DeleteTestsResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-delete-tests"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/delete_tests/
+      MemorySize: 256
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref DeleteTestsResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          REPORTING_BUCKET: !Ref ReportingBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTableName
+        - S3CrudPolicy:
+            BucketName: !Ref ReportingBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  SyncBdaIdpResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  SyncBdaIdpResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-sync-bda"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/sync_bda_idp_resolver/
+      MemorySize: 256
+      Timeout: 60
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref SyncBdaIdpResolverFunctionLogGroup
+      Environment:
+        Variables:
+          CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
+          CONFIGURATION_BUCKET_NAME: !Ref ConfigurationBucketName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigurationTableName
+        - S3CrudPolicy:
+            BucketName: !Ref ConfigurationBucketName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:*DataAutomationProject*
+                - bedrock:ListDataAutomationProjects
+                - bedrock:GetDataAutomationProject
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ListDocumentsByDateRangeResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListDocumentsByDateRangeResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-list-doc-range"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/list_documents_range_resolver/
+      MemorySize: 256
+      Timeout: 30
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref ListDocumentsByDateRangeResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TrackingTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+
+  ListDocumentsGSIResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListDocumentsGSIResolverFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access"
+          - id: W92
+            reason: "Function scales based on demand"
+    Properties:
+      FunctionName: !Sub "${StackName}-apollo-list-doc-gsi"
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ../appsync/src/lambda/list_documents_gsi_resolver/
+      MemorySize: 256
+      Timeout: 30
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
+      LoggingConfig:
+        LogGroup: !Ref ListDocumentsGSIResolverFunctionLogGroup
+      Environment:
+        Variables:
+          TRACKING_TABLE: !Ref TrackingTableName
+          LOG_LEVEL: !Ref LogLevel
+          USERS_TABLE_NAME: !Ref UsersTableName
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TrackingTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+        - !If
+          - !Not [!Equals [!Ref UsersTableArn, ""]]
+          - DynamoDBReadPolicy:
+              TableName: !Ref UsersTableName
+          - !Ref AWS::NoValue
+
+Outputs:
+  HttpApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+    Description: Apollo GraphQL HTTP API URL
+
+  HttpApiBackendUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/graphql/backend"
+    Description: Apollo GraphQL HTTP API URL for backend callers (API key auth)
+
+  WebSocketApiUrl:
+    Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod"
+    Description: WebSocket API URL for GraphQL subscriptions
+
+  WebSocketPublisherFunctionArn:
+    Value: !GetAtt WebSocketPublisherFunction.Arn
+    Description: ARN of the WebSocket Publisher function (for direct invocation by backend)
+
+  BackendApiKeySecretArn:
+    Value: !Ref BackendApiKeySecret
+    Description: Secrets Manager ARN for the backend API key

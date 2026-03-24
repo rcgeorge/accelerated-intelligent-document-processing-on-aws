@@ -19,7 +19,7 @@ import {
   StatusIndicator,
   Badge,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import useUserRole from '../../hooks/use-user-role';
@@ -128,7 +128,7 @@ const UserManagementLayout = (): React.JSX.Element => {
       setError('');
 
       try {
-        const client = generateClient();
+        const client = getClient();
         logger.debug('Loading users...');
         const result = await client.graphql({ query: listUsers });
         const usersList =
@@ -168,7 +168,7 @@ const UserManagementLayout = (): React.JSX.Element => {
     setSuccess('');
 
     try {
-      const client = generateClient();
+      const client = getClient();
       const allowedConfigVersions = selectedConfigVersions.length > 0 ? selectedConfigVersions.map((opt) => opt.value) : undefined;
       logger.debug('Creating user:', { email, persona, allowedConfigVersions });
       await client.graphql({
@@ -213,7 +213,7 @@ const UserManagementLayout = (): React.JSX.Element => {
     setSuccess('');
 
     try {
-      const client = generateClient();
+      const client = getClient();
       const allowedConfigVersions = editScopeVersions.length > 0 ? editScopeVersions.map((opt) => opt.value) : null;
       logger.debug('Updating user scope:', { userId: editingUser.userId, allowedConfigVersions });
       await client.graphql({
@@ -250,7 +250,7 @@ const UserManagementLayout = (): React.JSX.Element => {
     setSuccess('');
 
     try {
-      const client = generateClient();
+      const client = getClient();
       logger.debug('Deleting user:', userId);
       await client.graphql({
         query: deleteUserMutation,

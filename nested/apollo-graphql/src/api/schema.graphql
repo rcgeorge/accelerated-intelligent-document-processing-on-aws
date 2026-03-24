@@ -1,0 +1,775 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Apollo Server schema - ported from AppSync schema.
+# AppSync directives removed; RBAC enforced via custom middleware.
+# Subscription type removed (handled by WebSocket API).
+
+scalar JSON
+scalar DateTime
+scalar Timestamp
+
+type CapacityResult {
+  success: Boolean!
+  errorMessage: String
+  data: String
+  metrics: [CapacityMetric]
+  quotaRequirements: [QuotaRequirement]
+  latencyDistribution: LatencyDistribution
+  calculationDetails: CalculationDetails
+  recommendations: [String]
+}
+
+type LatencyDistribution {
+  p50: String
+  p75: String
+  p90: String
+  p95: String
+  p99: String
+  procP50: String
+  procP75: String
+  procP90: String
+  procP95: String
+  procP99: String
+  queueP50: String
+  queueP75: String
+  queueP90: String
+  queueP95: String
+  queueP99: String
+  baseLatency: String
+  queueLatency: String
+  totalLatency: String
+  maxAllowed: String
+  exceedsLimit: Boolean
+}
+
+type CapacityMetric {
+  label: String!
+  value: String!
+}
+
+type QuotaRequirement {
+  service: String!
+  category: String!
+  currentQuota: String!
+  requiredQuota: String!
+  statusText: String!
+  modelId: String
+}
+
+type CalculationDetails {
+  quotasUsed: QuotasUsed
+}
+
+type QuotasUsed {
+  bedrock_models: JSON
+}
+
+type Document {
+  PK: ID!
+  SK: ID!
+  ObjectKey: ID
+  ObjectStatus: String
+  InitialEventTime: DateTime
+  QueuedTime: DateTime
+  WorkflowStartTime: DateTime
+  CompletionTime: DateTime
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+  PageCount: Int
+  Sections: [Section]
+  Pages: [Page]
+  Metering: JSON
+  EvaluationReportUri: String
+  EvaluationStatus: String
+  SummaryReportUri: String
+  RuleValidationResultUri: String
+  ExpiresAfter: Timestamp
+  HITLStatus: String
+  HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+  HITLSectionsPending: [String]
+  HITLSectionsCompleted: [String]
+  HITLSectionsSkipped: [String]
+  HITLReviewOwner: String
+  HITLReviewOwnerEmail: String
+  HITLReviewedBy: String
+  HITLReviewedByEmail: String
+  HITLReviewHistory: JSON
+  ConfidenceAlertCount: Int
+  ConfigVersion: String
+  TraceId: String
+}
+
+type Section {
+  Id: String
+  PageIds: [Int]
+  Class: String
+  OutputJSONUri: String
+  ConfidenceThresholdAlerts: [ConfidenceThresholdAlert]
+}
+
+type ConfidenceThresholdAlert {
+  attributeName: String
+  confidence: Float
+  confidenceThreshold: Float
+}
+
+type Page {
+  Id: Int
+  Class: String
+  ImageUri: String
+  TextUri: String
+  TextConfidenceUri: String
+}
+
+type DocumentList {
+  Documents: [DocumentListItem]
+  nextToken: String
+}
+
+type DocumentListItem {
+  PK: ID!
+  SK: ID!
+  ObjectKey: ID
+  InitialEventTime: DateTime
+  ExpiresAfter: Timestamp
+  HITLStatus: String
+  HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+}
+
+type User {
+  userId: ID!
+  email: String!
+  persona: String!
+  status: String
+  createdAt: DateTime
+  allowedConfigVersions: [String]
+}
+
+type UserList {
+  users: [User]
+}
+
+type ValidationError {
+  field: String
+  message: String
+  type: String
+}
+
+type ConfigurationError {
+  type: String
+  message: String
+  validationErrors: [ValidationError]
+}
+
+type ConfigurationResponse {
+  success: Boolean!
+  Schema: JSON
+  Default: JSON
+  Custom: JSON
+  error: ConfigurationError
+}
+
+type ConfigurationVersion {
+  versionName: String!
+  isActive: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+  description: String
+  managed: Boolean
+  bdaProjectArn: String
+  bdaSyncStatus: String
+  bdaLastSyncedAt: String
+}
+
+type ConfigurationVersionsResponse {
+  success: Boolean!
+  versions: [ConfigurationVersion]
+  error: ConfigurationError
+}
+
+type UpdateConfigurationResponse {
+  success: Boolean!
+  message: String
+  versionName: String
+  error: ConfigurationError
+}
+
+type SyncBdaIdpResponse {
+  success: Boolean!
+  message: String
+  processedClasses: [String]
+  direction: String
+  bdaProjectArn: String
+  bdaSyncStatus: String
+  error: ConfigurationError
+}
+
+type PricingResponse {
+  success: Boolean!
+  pricing: JSON
+  defaultPricing: JSON
+  error: ConfigurationError
+}
+
+type UpdatePricingResponse {
+  success: Boolean!
+  message: String
+  error: ConfigurationError
+}
+
+type ConfigurationLibraryItem {
+  name: String!
+  hasReadme: Boolean!
+  path: String!
+  configFileType: String
+}
+
+type ConfigurationLibraryResponse {
+  success: Boolean!
+  items: [ConfigurationLibraryItem]
+  error: String
+}
+
+type ConfigurationLibraryFileResponse {
+  success: Boolean!
+  content: String!
+  contentType: String!
+  error: String
+}
+
+type DiscoveryJobList {
+  DiscoveryJobs: [DiscoveryJobListItem]
+  nextToken: String
+}
+
+type DiscoveryJobListItem {
+  jobId: ID!
+  documentKey: String
+  groundTruthKey: String
+  status: String!
+  createdAt: String
+  updatedAt: String
+  errorMessage: String
+  version: String
+  discoveredClassName: String
+  statusMessage: String
+  pageRange: String
+}
+
+input CreateDocumentInput {
+  ObjectKey: ID
+  ObjectStatus: String
+  InitialEventTime: DateTime
+  QueuedTime: DateTime
+  ExpiresAfter: Timestamp
+  ConfigVersion: String
+  TraceId: String
+}
+
+type CreateDocumentOutput {
+  ObjectKey: ID
+}
+
+type PresignedUrlResponse {
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+}
+
+type DisPresignedUrlResponse {
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+  groundTruthObjectKey: String
+  groundTruthPresignedUrl: String
+}
+
+input UpdateDocumentInput {
+  ObjectKey: ID!
+  ObjectStatus: String
+  QueuedTime: DateTime
+  WorkflowStartTime: DateTime
+  CompletionTime: DateTime
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+  PageCount: Int
+  Sections: [SectionInput]
+  Pages: [PageInput]
+  Metering: JSON
+  EvaluationReportUri: String
+  EvaluationStatus: String
+  SummaryReportUri: String
+  RuleValidationResultUri: String
+  HITLStatus: String
+  HITLReviewURL: String
+  HITLTriggered: Boolean
+  HITLCompleted: Boolean
+  HITLSectionsPending: [String]
+  HITLSectionsCompleted: [String]
+  HITLSectionsSkipped: [String]
+  HITLReviewOwner: String
+  HITLReviewOwnerEmail: String
+  HITLReviewedBy: String
+  HITLReviewedByEmail: String
+  HITLReviewHistory: JSON
+  ConfidenceAlertCount: Int
+  ConfigVersion: String
+  TraceId: String
+}
+
+input UpdateDocumentStatusInput {
+  ObjectKey: ID!
+  ObjectStatus: String!
+  WorkflowExecutionArn: String
+  WorkflowStatus: String
+}
+
+input UpdateDocumentSectionInput {
+  ObjectKey: ID!
+  SectionIndex: Int!
+  Section: SectionInput!
+}
+
+input SectionInput {
+  Id: String
+  PageIds: [Int]
+  Class: String
+  OutputJSONUri: String
+  ConfidenceThresholdAlerts: [ConfidenceThresholdAlertInput]
+}
+
+input ConfidenceThresholdAlertInput {
+  attributeName: String
+  confidence: Float
+  confidenceThreshold: Float
+}
+
+input PageInput {
+  Id: Int
+  Class: String
+  ImageUri: String
+  TextUri: String
+  TextConfidenceUri: String
+}
+
+type CopyToBaselineResponse {
+  success: Boolean!
+  message: String
+}
+
+type ProcessChangesResponse {
+  success: Boolean!
+  message: String
+  processingJobId: String
+}
+
+type AbortWorkflowResponse {
+  success: Boolean!
+  message: String
+  abortedCount: Int
+  failedCount: Int
+  errors: [String]
+}
+
+input ModifiedSectionInput {
+  sectionId: String!
+  classification: String!
+  pageIds: [Int!]!
+  isNew: Boolean
+  isDeleted: Boolean
+}
+
+input ModifiedPageInput {
+  pageId: Int!
+  textModified: Boolean!
+  classReset: Boolean!
+  newTextUri: String
+  newConfidenceUri: String
+}
+
+type FileContentsResponse {
+  content: String!
+  contentType: String!
+  size: Int!
+  isBinary: Boolean
+}
+
+type StepFunctionExecutionStep {
+  name: String!
+  type: String!
+  status: String!
+  startDate: DateTime
+  stopDate: DateTime
+  input: JSON
+  output: JSON
+  error: String
+  mapIterations: Int
+  mapIterationDetails: [StepFunctionExecutionStep]
+}
+
+type StepFunctionExecutionResponse {
+  executionArn: String!
+  status: String!
+  startDate: DateTime
+  stopDate: DateTime
+  input: JSON
+  output: JSON
+  error: String
+  steps: [StepFunctionExecutionStep]
+}
+
+type DiscoveryJob {
+  jobId: ID!
+  status: String!
+  errorMessage: String
+  discoveredClassName: String
+  statusMessage: String
+}
+
+type Agent {
+  agent_id: String!
+  agent_name: String!
+  agent_description: String!
+  sample_queries: [String]
+}
+
+type AgentJob {
+  jobId: ID!
+  status: String!
+  query: String!
+  agentIds: String
+  createdAt: DateTime!
+  completedAt: DateTime
+  result: String
+  error: String
+  agent_messages: String
+}
+
+type AgentJobConnection {
+  items: [AgentJob]
+  nextToken: String
+}
+
+type TestRunStatus {
+  testRunId: String!
+  status: String!
+  filesCount: Int!
+  completedFiles: Int!
+  failedFiles: Int!
+  evaluatingFiles: Int!
+  progress: Float!
+}
+
+type TestRun {
+  testRunId: String!
+  testSetId: String
+  testSetName: String
+  status: String!
+  filesCount: Int!
+  completedFiles: Int
+  failedFiles: Int
+  overallAccuracy: Float
+  weightedOverallScores: JSON
+  averageConfidence: Float
+  accuracyBreakdown: JSON
+  confusionMatrix: JSON
+  fieldMetrics: JSON
+  splitClassificationMetrics: JSON
+  totalCost: Float
+  costBreakdown: JSON
+  createdAt: DateTime
+  completedAt: DateTime
+  context: String
+  configVersion: String
+  config: JSON
+}
+
+type TestRunComparison {
+  metrics: JSON!
+  configs: [ConfigSetting]
+}
+
+type ConfigSetting {
+  setting: String!
+  values: JSON!
+}
+
+type TestSetValidationResponse {
+  exists: Boolean!
+  testSetId: String
+}
+
+type TestSet {
+  id: String!
+  name: String!
+  description: String
+  filePattern: String
+  fileCount: Int
+  status: String
+  createdAt: DateTime!
+  error: String
+}
+
+input TestSetUploadInput {
+  fileName: String!
+  fileSize: Int!
+  description: String
+}
+
+input FileUploadInfo {
+  fileName: String!
+  fileSize: Int!
+  contentType: String!
+}
+
+type TestSetUploadResponse {
+  testSetId: String!
+  presignedUrl: String!
+  objectKey: String!
+}
+
+type PresignedUploadUrl {
+  fileName: String!
+  presignedUrl: String!
+  objectKey: String!
+  usePostMethod: String!
+}
+
+input TestRunInput {
+  testSetId: String!
+  context: String
+  numberOfFiles: Int
+  configVersion: String
+}
+
+type AgentChatMessage {
+  role: String!
+  content: String!
+  timestamp: String!
+  isProcessing: Boolean
+  sessionId: String
+  messageType: String
+  toolMetadata: ToolMetadata
+}
+
+type ToolMetadata {
+  toolName: String
+  toolUseId: String
+}
+
+input ToolMetadataInput {
+  toolName: String
+  toolUseId: String
+}
+
+type ChatSession {
+  sessionId: ID!
+  title: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  messageCount: Int!
+  lastMessage: String
+}
+
+type ChatSessionConnection {
+  items: [ChatSession]
+  nextToken: String
+}
+
+type DocumentPage {
+  Documents: [Document]
+  nextToken: String
+}
+
+type DocumentCount {
+  count: Int!
+}
+
+# =============================================================================
+# RBAC Configuration
+#
+# Access control is enforced by the auth middleware using the RBAC_CONFIG map
+# in the Apollo Server handler. Each field maps to required Cognito groups.
+# Backend-only (IAM) operations require the x-api-key header instead.
+#
+# Roles (Cognito Groups):
+#   Admin    - Full access to all operations
+#   Author   - Read + write (documents, configuration, tests, discovery)
+#   Reviewer - HITL review operations + limited document list
+#   Viewer   - Read-only access to documents, config, agent chat
+# =============================================================================
+
+type Mutation {
+  # Backend-only operations (require API key auth)
+  createDocument(input: CreateDocumentInput!): CreateDocumentOutput
+  updateDocument(input: UpdateDocumentInput!): Document
+  updateDocumentStatus(input: UpdateDocumentStatusInput!): Document
+  updateDocumentSection(input: UpdateDocumentSectionInput!): Document
+  updateAgentJobStatus(
+    jobId: ID!
+    status: String!
+    userId: String!
+    result: String
+  ): Boolean
+  updateDiscoveryJobStatus(
+    jobId: ID!
+    status: String!
+    errorMessage: String
+    discoveredClassName: String
+    statusMessage: String
+  ): DiscoveryJob
+
+  # Admin-only operations
+  deleteConfigVersion(versionName: String!): UpdateConfigurationResponse
+  createUser(email: String!, persona: String!, allowedConfigVersions: [String]): User
+  updateUser(userId: ID!, allowedConfigVersions: [String]): User
+  deleteUser(userId: ID!): Boolean
+
+  # Admin + Author operations
+  deleteDocument(objectKeys: [String!]!): Boolean!
+  updateConfiguration(versionName: String!, customConfig: JSON!, description: String): UpdateConfigurationResponse
+  setActiveVersion(versionName: String!): UpdateConfigurationResponse
+  syncBdaIdp(direction: String, versionName: String, bdaProjectArn: String, saveArn: Boolean, syncMode: String): SyncBdaIdpResponse
+  updatePricing(pricingConfig: JSON!): UpdatePricingResponse
+  restoreDefaultPricing: UpdatePricingResponse
+  uploadDocument(
+    fileName: String!
+    contentType: String
+    prefix: String
+    bucket: String
+    version: String
+  ): PresignedUrlResponse!
+  deleteDiscoveryJob(jobId: ID!): Boolean!
+  uploadDiscoveryDocument(
+    fileName: String!
+    contentType: String
+    prefix: String
+    bucket: String
+    groundTruthFileName: String
+    version: String
+    pageRanges: [String]
+    pageLabels: [String]
+  ): DisPresignedUrlResponse!
+  autoDetectSections(
+    documentKey: String!
+    bucket: String!
+    version: String
+  ): String
+  copyToBaseline(objectKey: String!): CopyToBaselineResponse!
+  reprocessDocument(objectKeys: [String!]!, version: String): Boolean!
+  abortWorkflow(objectKeys: [String!]!): AbortWorkflowResponse!
+  startTestRun(input: TestRunInput!): TestRun
+  deleteTests(testRunIds: [String!]!): Boolean!
+  addTestSet(name: String!, description: String, filePattern: String!, bucketType: String!, fileCount: Int!): TestSet
+  addTestSetFromUpload(input: TestSetUploadInput!): TestSetUploadResponse
+  deleteTestSets(testSetIds: [String!]!): Boolean!
+
+  # Admin + Reviewer operations (HITL review workflow)
+  processChanges(
+    objectKey: String!
+    modifiedSections: [ModifiedSectionInput!]!
+    modifiedPages: [ModifiedPageInput!]
+  ): ProcessChangesResponse!
+  completeSectionReview(objectKey: String!, sectionId: String!, editedData: JSON): Document
+  skipAllSectionsReview(objectKey: String!): Document
+  claimReview(objectKey: String!): Document
+  releaseReview(objectKey: String!): Document
+
+  # Agent Chat operations (all authenticated users + API key for backend)
+  sendAgentChatMessage(
+    prompt: String!
+    sessionId: String
+    method: String
+    enableCodeIntelligence: Boolean
+    toolMetadata: ToolMetadataInput
+  ): AgentChatMessage
+  updateAgentChatMessage(sessionId: ID!, content: String!): AgentChatMessage
+  deleteChatSession(sessionId: ID!): Boolean
+  updateChatSessionTitle(sessionId: ID!, title: String!): ChatSession
+  deleteAgentJob(jobId: ID!): Boolean
+}
+
+type Query {
+  # Document queries - all authenticated users
+  getDocument(ObjectKey: ID!): Document
+  listDocuments(
+    startDateTime: DateTime
+    endDateTime: DateTime
+    limit: Int
+    nextToken: String
+  ): DocumentPage
+  getDocumentCount(
+    startDateTime: DateTime
+    endDateTime: DateTime
+  ): DocumentCount
+  listDocumentsDateHour(date: String, hour: Int): DocumentList
+  listDocumentsDateShard(date: String, shard: Int): DocumentList
+  listDocumentsByDateRange(
+    startDateTime: DateTime!
+    endDateTime: DateTime!
+    limit: Int
+    nextToken: String
+  ): DocumentPage
+  getFileContents(s3Uri: String!): FileContentsResponse
+  getStepFunctionExecution(executionArn: String!): StepFunctionExecutionResponse
+
+  # Configuration & pricing queries - Admin, Author, Viewer
+  getConfigVersions: ConfigurationVersionsResponse
+  getConfigVersion(versionName: String!): ConfigurationResponse
+  getPricing: PricingResponse
+  calculateCapacity(input: String!): CapacityResult
+
+  # Agent Chat & Code Explorer queries
+  listAvailableAgents: [Agent]
+  getAgentChatMessages(sessionId: ID!): [AgentChatMessage]
+  listChatSessions(limit: Int, nextToken: String): ChatSessionConnection
+  getChatMessages(sessionId: ID!): [AgentChatMessage]
+
+  # Knowledge base & document chat queries
+  queryKnowledgeBase(input: String!, sessionId: String): String
+  chatWithDocument(
+    s3Uri: String!
+    prompt: String!
+    history: JSON!
+    modelId: String!
+  ): String
+
+  # Discovery queries - Admin, Author only
+  listDiscoveryJobs: DiscoveryJobList
+
+  # Agent query system - Admin, Author, Viewer
+  submitAgentQuery(query: String!, agentIds: [String!]!): AgentJob
+  getAgentJobStatus(jobId: ID!): AgentJob
+  listAgentJobs(limit: Int, nextToken: String): AgentJobConnection
+
+  # Test Studio queries - Admin, Author only
+  getTestRun(testRunId: String!): TestRun
+  getTestRuns(timePeriodHours: Int, startDateTime: DateTime, endDateTime: DateTime): [TestRun]
+  getTestRunStatus(testRunId: String!): TestRunStatus
+  compareTestRuns(testRunIds: [String!]!): TestRunComparison
+  getTestSets: [TestSet]
+  listBucketFiles(bucketType: String!, filePattern: String!): [String]
+  validateTestFileName(fileName: String!): TestSetValidationResponse
+
+  # Configuration Library queries - Admin, Author, Viewer
+  listConfigurationLibrary(pattern: String!): ConfigurationLibraryResponse
+  getConfigurationLibraryFile(
+    pattern: String!
+    configName: String!
+    fileName: String!
+  ): ConfigurationLibraryFileResponse
+
+  # User Management queries
+  listUsers: UserList
+  getMyProfile: User
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+}

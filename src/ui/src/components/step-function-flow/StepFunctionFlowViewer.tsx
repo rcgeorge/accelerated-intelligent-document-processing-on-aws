@@ -17,7 +17,7 @@ import {
   FaList,
   FaExclamationTriangle,
 } from 'react-icons/fa';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 
 import { getStepFunctionExecution } from '../../graphql/generated';
@@ -26,7 +26,7 @@ import StepDetails from './StepDetails';
 
 import './StepFunctionFlowViewer.css';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('StepFunctionFlowViewer');
 
 interface StepConfig {

@@ -13,7 +13,7 @@ import {
   ExpandableSection,
   StatusIndicator,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import { formatConfigVersionLink } from '../test-studio/utils/configVersionUtils';
 import type { ConfigVersion } from '../test-studio/utils/configVersionUtils';
@@ -135,7 +135,7 @@ interface TroubleshootJobData {
   documentKey: string | undefined;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('DocumentPanel');
 
 // Component to display confidence alerts count only

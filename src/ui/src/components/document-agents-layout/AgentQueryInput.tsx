@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect, useRef } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import {
   FormField,
@@ -53,7 +53,7 @@ interface AgentQueryInputProps {
   selectedResult?: SelectedResult | null;
 }
 
-const client = generateClient();
+const client = getClient();
 
 // Custom styles for expandable textarea
 const textareaStyles = `

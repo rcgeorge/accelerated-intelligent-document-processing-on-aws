@@ -24,7 +24,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import useConfiguration from '../../hooks/use-configuration';
 import useConfigurationVersions from '../../hooks/use-configuration-versions';
@@ -38,7 +38,7 @@ import { deepMerge } from '../../utils/configUtils';
 import { syncBdaIdp } from '../../graphql/generated';
 import { parseConfigurationData } from '../../graphql/awsjson-parsers';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('ConfigurationLayout');
 
 // Utility function to normalize boolean values from strings (same as use-configuration.js)

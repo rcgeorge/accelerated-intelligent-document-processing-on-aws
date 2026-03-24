@@ -14,7 +14,7 @@ import {
   Modal,
   Alert,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
@@ -23,7 +23,7 @@ import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 import PageTextEditorModal from './PageTextEditorModal';
 import { processChanges } from '../../graphql/generated';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('PagesPanel');
 
 interface PageItem {

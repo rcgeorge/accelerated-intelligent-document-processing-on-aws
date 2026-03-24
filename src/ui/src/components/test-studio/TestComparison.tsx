@@ -14,7 +14,7 @@ import {
   CollectionPreferences,
   ExpandableSection,
 } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { compareTestRuns } from '../../graphql/generated';
 import TestStudioHeader from './TestStudioHeader';
 import useLocalStorage from '../common/local-storage';
@@ -22,7 +22,7 @@ import useConfigurationVersions from '../../hooks/use-configuration-versions';
 import { formatConfigVersionLink, formatConfigVersionText, type ConfigVersion as UtilsConfigVersion } from './utils/configVersionUtils';
 import { parseComparisonMetrics, parseWeightedOverallScores, parseConfigSettingValues } from '../../graphql/awsjson-parsers';
 
-const client = generateClient();
+const client = getClient();
 
 interface TestComparisonProps {
   preSelectedTestRunIds?: string[];

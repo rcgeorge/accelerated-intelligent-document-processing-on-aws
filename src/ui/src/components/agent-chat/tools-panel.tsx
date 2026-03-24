@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import {
   HelpPanel,
@@ -17,7 +17,7 @@ import {
 } from '@cloudscape-design/components';
 import { listAvailableAgents } from '../../graphql/generated';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('AgentChatToolsPanel');
 
 interface Agent {

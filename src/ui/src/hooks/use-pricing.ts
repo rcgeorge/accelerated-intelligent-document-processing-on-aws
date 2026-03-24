@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { getPricing, updatePricing as updatePricingOp, restoreDefaultPricing as restoreDefaultPricingOp } from '../graphql/generated';
 import { parsePricingData } from '../graphql/awsjson-parsers';
@@ -18,7 +18,7 @@ interface UsePricingReturn {
   restoreDefaultPricing: () => Promise<boolean>;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('usePricing');
 
 const usePricing = (): UsePricingReturn => {

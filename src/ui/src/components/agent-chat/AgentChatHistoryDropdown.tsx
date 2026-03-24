@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect, useRef } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { ButtonDropdown, Button } from '@cloudscape-design/components';
 
@@ -9,7 +9,7 @@ import { listChatSessions, deleteChatSession, getChatMessages } from '../../grap
 
 import type { ChatMessage } from '../../types/agent-chat';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('AgentChatHistoryDropdown');
 
 interface ChatSession {

@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { Badge, Box } from '@cloudscape-design/components';
 import type { BadgeProps } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { getTestRunStatus } from '../../graphql/generated';
 
-const client = generateClient();
+const client = getClient();
 
 interface TestRunStatusData {
   status: string;

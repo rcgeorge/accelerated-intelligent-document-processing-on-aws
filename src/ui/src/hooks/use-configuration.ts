@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT-0
 
 import { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { getConfigVersion, updateConfiguration as updateConfigurationOp } from '../graphql/generated';
 import { deepMerge } from '../utils/configUtils';
 import { parseConfigurationData } from '../graphql/awsjson-parsers';
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('useConfiguration');
 
 /** Return type for the useConfiguration hook */

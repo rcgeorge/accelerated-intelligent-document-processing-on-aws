@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* eslint-disable react/no-unstable-nested-components, react/no-array-index-key */
 import React, { useState, useMemo, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { calculateCapacity as calculateCapacityOp } from '../../graphql/generated';
 import {
   Container,
@@ -1476,7 +1476,7 @@ const CapacityPlanningLayout = () => {
       console.log('🔍 Sending capacity calculation request:', input);
 
       // Create client inside the function to ensure Amplify is configured
-      const client = generateClient();
+      const client = getClient();
       const response = await client.graphql({
         query: calculateCapacityOp,
         variables: { input: JSON.stringify(input) },

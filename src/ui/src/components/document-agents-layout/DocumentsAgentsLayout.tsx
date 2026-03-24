@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React, { useEffect } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { Container, Header, SpaceBetween, Spinner, Box } from '@cloudscape-design/components';
 
@@ -13,7 +13,7 @@ import AgentJobStatus from './AgentJobStatus';
 import AgentResultDisplay from './AgentResultDisplay';
 import AgentMessagesDisplay from './AgentMessagesDisplay';
 
-const client = generateClient();
+const client = getClient();
 
 const logger = new ConsoleLogger('DocumentsAgentsLayout');
 

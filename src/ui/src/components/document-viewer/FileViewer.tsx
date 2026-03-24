@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { Box } from '@cloudscape-design/components';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { ConsoleLogger } from 'aws-amplify/utils';
 import DOMPurify from 'dompurify';
 // Note: XLSX and mammoth imports removed since we're using download approach for Excel/Docx files
@@ -16,7 +16,7 @@ interface FileViewerProps {
   objectKey: string;
 }
 
-const client = generateClient();
+const client = getClient();
 const logger = new ConsoleLogger('FileViewer');
 
 // Helper function to create a safe data URL for HTML content

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, SpaceBetween, ButtonDropdown, Pagination, Box, TextFilter, Flashbar } from '@cloudscape-design/components';
 import type { IconProps } from '@cloudscape-design/components';
 import { useCollection } from '@cloudscape-design/collection-hooks';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../../graphql/client';
 import { getTestRuns, deleteTests } from '../../graphql/generated';
 import DeleteTestModal from './DeleteTestModal';
 import DateRangeModal from '../common/DateRangeModal';
@@ -17,7 +17,7 @@ import { formatConfigVersionLink, formatConfigVersionText } from './utils/config
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GqlResult = { data: Record<string, any> };
 
-const client = generateClient();
+const client = getClient();
 
 const TIME_PERIOD_OPTIONS = [
   { id: 'refresh-2h', hours: 2, text: '2 hrs' },

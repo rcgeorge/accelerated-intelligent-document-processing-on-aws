@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState, useEffect } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { generateClient } from 'aws-amplify/api';
+import { getClient } from '../graphql/client';
 import { getMyProfile } from '../graphql/generated';
 
 /**
@@ -55,7 +55,7 @@ const useUserRole = (): UserRoleReturn => {
         // Fetch user profile for allowedConfigVersions (skip for Admin - always unrestricted)
         if (!groupsArray.includes('Admin')) {
           try {
-            const client = generateClient();
+            const client = getClient();
             const result = await client.graphql({ query: getMyProfile });
             const profile = result.data.getMyProfile;
             if (profile?.allowedConfigVersions && profile.allowedConfigVersions.length > 0) {
