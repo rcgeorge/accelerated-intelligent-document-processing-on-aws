@@ -16,8 +16,9 @@ import { createApolloClient } from './apollo-adapter';
 
 const DEPLOYMENT_MODE = import.meta.env.VITE_DEPLOYMENT_MODE || 'Standard';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type GraphQLClient = ReturnType<typeof generateClient> | ReturnType<typeof createApolloClient>;
+// Use the Amplify client type so all existing call sites type-check without changes.
+// The Apollo adapter is structurally compatible at runtime.
+type GraphQLClient = ReturnType<typeof generateClient>;
 
 let _client: GraphQLClient | null = null;
 
@@ -29,7 +30,9 @@ let _client: GraphQLClient | null = null;
 export function getClient(): GraphQLClient {
   if (!_client) {
     if (DEPLOYMENT_MODE === 'GovCloud') {
-      _client = createApolloClient();
+      // The Apollo adapter's graphql() method is runtime-compatible with the
+      // Amplify client interface. Use a type assertion to satisfy TypeScript.
+      _client = createApolloClient() as unknown as GraphQLClient;
     } else {
       _client = generateClient();
     }

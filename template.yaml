@@ -4933,7 +4933,7 @@ Resources:
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
             - UseApolloServer
-            - !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+            - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ws-publisher"
             - ""
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_OUTPUT_LOCATION: !Sub
@@ -4970,7 +4970,7 @@ Resources:
           - Statement:
               Effect: Allow
               Action: lambda:InvokeFunction
-              Resource: !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+              Resource: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ws-publisher"
           - !Ref AWS::NoValue
         - DynamoDBCrudPolicy:
             TableName: !Ref ChatMessagesTable
@@ -5403,7 +5403,7 @@ Resources:
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
           WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
             - UseApolloServer
-            - !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketPublisherFunctionArn
+            - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ws-publisher"
             - ""
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_OUTPUT_LOCATION: !Sub
@@ -7588,21 +7588,46 @@ Outputs:
     Description: SQS Queue console URL
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/sqs/v2/home?region=${AWS::Region}#/queues/${DocumentQueue}
   WebUITestEnvFile:
-    Description: Copy to create .env file for local UI testing
+    Condition: UseAppSync
+    Description: Copy to create .env file for local UI testing (Standard/AppSync mode)
     Value: !Sub |-
       VITE_USER_POOL_ID=${UserPool}
       VITE_USER_POOL_CLIENT_ID=${UserPoolClient}
       VITE_IDENTITY_POOL_ID=${IdentityPool}
-      VITE_APPSYNC_GRAPHQL_URL=${AppSyncUrl}
+      VITE_APPSYNC_GRAPHQL_URL=${GraphQLApi.GraphQLUrl}
       VITE_AWS_REGION=${AWS::Region}
       VITE_SETTINGS_PARAMETER=${SettingsParameter}
       VITE_TEST_SET_BUCKET_NAME=${TestSetBucket}
       VITE_INPUT_BUCKET_NAME=${InputBucket}
+      VITE_DEPLOYMENT_MODE=Standard
       VITE_LATENCY_OPTIONS=[60, 120, 300, 600, 900, 1800, 3600]
       VITE_DEFAULT_MAX_LATENCY=60
       VITE_DEFAULT_TOKENS_BY_STEP={"OCR":4000,"Classification":2000,"Extraction":8000,"Assessment":4000,"Summarization":4000,"default":4000}
       VITE_DEFAULT_MAX_TOKENS_PER_REQUEST=4000
       VITE_BDA_TOKENS_PER_PAGE=2000
+  WebUITestEnvFileGovCloud:
+    Condition: UseApolloServer
+    Description: Copy to create .env file for local UI testing (GovCloud/Apollo mode)
+    Value: !Sub
+      - |-
+        VITE_USER_POOL_ID=${UserPool}
+        VITE_USER_POOL_CLIENT_ID=${UserPoolClient}
+        VITE_IDENTITY_POOL_ID=${IdentityPool}
+        VITE_APPSYNC_GRAPHQL_URL=
+        VITE_GRAPHQL_HTTP_URL=${HttpApiUrl}/graphql
+        VITE_GRAPHQL_WS_URL=${WebSocketApiUrl}
+        VITE_AWS_REGION=${AWS::Region}
+        VITE_SETTINGS_PARAMETER=${SettingsParameter}
+        VITE_TEST_SET_BUCKET_NAME=${TestSetBucket}
+        VITE_INPUT_BUCKET_NAME=${InputBucket}
+        VITE_DEPLOYMENT_MODE=GovCloud
+        VITE_LATENCY_OPTIONS=[60, 120, 300, 600, 900, 1800, 3600]
+        VITE_DEFAULT_MAX_LATENCY=60
+        VITE_DEFAULT_TOKENS_BY_STEP={"OCR":4000,"Classification":2000,"Extraction":8000,"Assessment":4000,"Summarization":4000,"default":4000}
+        VITE_DEFAULT_MAX_TOKENS_PER_REQUEST=4000
+        VITE_BDA_TOKENS_PER_PAGE=2000
+      - HttpApiUrl: !GetAtt APOLLOGRAPHQLSTACK.Outputs.HttpApiUrl
+        WebSocketApiUrl: !GetAtt APOLLOGRAPHQLSTACK.Outputs.WebSocketApiUrl
   ExternalMCPAgentsSecretConsoleURL:
     Description: External MCP Agents secret console URL - configure MCP server credentials here (JSON array format)
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/secretsmanager/secret?name=${AWS::StackName}/external-mcp-agents/credentials&region=${AWS::Region}"

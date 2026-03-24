@@ -80,10 +80,7 @@ async function executeGraphQL(query: string, variables?: Record<string, unknown>
  * Create a subscription observable that matches the Amplify client interface:
  * client.graphql({ query }).subscribe({ next, error })
  */
-function createSubscriptionObservable(
-  query: string,
-  variables?: Record<string, unknown>,
-) {
+function createSubscriptionObservable(query: string, variables?: Record<string, unknown>) {
   const subscriptionName = extractSubscriptionName(query);
   const variableNames = extractVariableNames(query);
 

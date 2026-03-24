@@ -122,12 +122,14 @@ async function ensureConnection(): Promise<WebSocket> {
 
 function sendSubscribe(topic: string, variables: Record<string, unknown>, id: string) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      action: 'subscribe',
-      topic,
-      variables,
-      id,
-    }));
+    ws.send(
+      JSON.stringify({
+        action: 'subscribe',
+        topic,
+        variables,
+        id,
+      }),
+    );
   }
 }
 
@@ -139,11 +141,7 @@ function sendSubscribe(topic: string, variables: Record<string, unknown>, id: st
  * @param callback - Callback with next/error handlers
  * @returns Subscription with unsubscribe method
  */
-export async function subscribe(
-  topic: string,
-  variables: Record<string, unknown>,
-  callback: SubscriptionCallback,
-): Promise<Subscription> {
+export async function subscribe(topic: string, variables: Record<string, unknown>, callback: SubscriptionCallback): Promise<Subscription> {
   const id = getNextId();
 
   // Build topic key with variables

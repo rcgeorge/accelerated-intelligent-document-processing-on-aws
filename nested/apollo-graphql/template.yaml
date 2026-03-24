@@ -196,6 +196,11 @@ Resources:
 
   HttpApiJwtAuthorizer:
     Type: AWS::ApiGatewayV2::Authorizer
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - E3012  # Property Audience/Issuer type validation with Ref/Sub intrinsics
     Properties:
       ApiId: !Ref HttpApi
       AuthorizerType: JWT
