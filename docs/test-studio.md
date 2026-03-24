@@ -24,7 +24,7 @@ The accelerator automatically deploys **four benchmark datasets** from HuggingFa
 3. **DocSplit-Poly-Seq**: 500 multi-page packets with 13 document types
 4. **Fake-W2-Tax-Forms**: 2,000 synthetic US W-2 tax form images with 45-field ground truth
 
-All datasets are deployed automatically with zero manual steps required.
+All datasets are deployed automatically with zero manual steps required. Each test set has a corresponding **managed configuration version** (e.g., `fake-w2`, `docsplit`) that is auto-selected in Test Studio when the test set is chosen. See [Configuration — Managed Configuration Versions](configuration.md#managed-configuration-versions) for details.
 
 ---
 
@@ -485,6 +485,7 @@ For full details on configuration versioning, see [configuration-versions.md](co
   - **Test run metadata**: Configuration version, duration, context, file counts
   - **Overall accuracy and confidence metrics**
   - **Accuracy breakdown** (precision, recall, F1-score, false alarm rate, false discovery rate)
+  - **Field-Level Metrics**: Per-field extraction performance table with columns: Field Name, Accuracy, Precision, Recall, TP, FP, TN, FN
   - **Average Document Split Classification Metrics**:
     - Page Level Accuracy (average across documents)
     - Split Accuracy Without Order (average across documents)
@@ -495,3 +496,55 @@ For full details on configuration versioning, see [configuration-versions.md](co
 - Side-by-side test comparison with all metrics including configuration versions
 - Export capabilities (JSON/CSV downloads include all metrics)
 - Integrated delete operations
+
+### Bulk Aggregation with Stickler
+
+Test Studio uses Stickler's `BulkStructuredModelEvaluator` for accurate metric aggregation across multiple documents:
+
+**How It Works:**
+1. **Individual Evaluation**: Each document is evaluated with `include_confusion_matrix=True` to capture detailed field-level metrics
+2. **Storage**: Raw Stickler comparison results are stored in S3 at `{doc_path}/evaluation/results.json` under the `stickler_comparison_result` field
+3. **Aggregation**: When viewing test results, the system:
+   - Scans DynamoDB for all documents in the test run (PK pattern: `doc#{test_run_id}*`)
+   - Loads evaluation results from S3
+   - Extracts `stickler_comparison_result` from each document
+   - Uses `aggregate_from_comparisons()` to compute aggregate metrics
+4. **Fallback**: Athena-based aggregation remains available for backward compatibility with older data
+
+**Benefits:**
+- **More Accurate**: Uses Stickler's confusion matrix for precise field-level metrics
+- **Consistent**: Same evaluation engine for single documents and bulk aggregation
+- **Efficient**: No Athena queries needed for new data
+- **Cost Effective**: Reduces Athena query costs
+
+### Field-Level Metrics
+
+Test results include detailed per-field extraction performance metrics displayed in an interactive table:
+
+**Displayed Columns:**
+1. **Field Name**: The name of the extracted field
+2. **Accuracy**: `(TP + TN) / (TP + FP + TN + FN)` - Overall correctness
+3. **Precision**: `TP / (TP + FP)` - Accuracy of positive predictions
+4. **Recall**: `TP / (TP + FN)` - Coverage of actual positives
+5. **TP** (True Positives): Correctly extracted values
+6. **FP** (False Positives): Incorrectly extracted values
+7. **TN** (True Negatives): Correctly identified as absent
+8. **FN** (False Negatives): Missed extractions
+
+**Features:**
+- **Searchable**: Filter fields by name to quickly find specific metrics
+- **Sortable**: Click any column header to sort by that metric
+- **Expandable Section**: Collapsed by default to keep results view clean
+- **Paginated**: 10 fields per page for easy navigation
+- **Resizable Columns**: Adjust column widths as needed
+
+**How It Works:**
+- Backend stores confusion matrix values (TP, FP, TN, FN) from Stickler aggregation
+- UI calculates Accuracy, Precision, and Recall on-the-fly from these values
+- Metrics displayed with 3 decimal precision (e.g., 0.850)
+
+**Use Cases:**
+- Identify which fields have low extraction accuracy
+- Compare field-level performance across test runs
+- Prioritize prompt engineering efforts on problematic fields
+- Track improvement in specific fields after configuration changes

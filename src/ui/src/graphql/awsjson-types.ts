@@ -55,6 +55,28 @@ export interface SplitClassificationMetrics {
   };
 }
 
+/** Parsed field metrics from TestRun.fieldMetrics AWSJSON field */
+export interface FieldMetrics {
+  [fieldName: string]: {
+    tp?: number;
+    fp?: number;
+    tn?: number;
+    fn?: number;
+    [key: string]: unknown;
+  };
+}
+
+/** Parsed confusion matrix from TestRun.confusionMatrix AWSJSON field */
+export interface ConfusionMatrix {
+  tp?: number;
+  fp?: number;
+  tn?: number;
+  fn?: number;
+  fa?: number;
+  fd?: number;
+  [key: string]: unknown;
+}
+
 /** Parsed comparison metrics from TestRunComparison.metrics AWSJSON field */
 export interface ComparisonMetrics {
   [key: string]: unknown;

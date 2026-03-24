@@ -790,34 +790,36 @@ Resources:
 
 
   ##########################################################################
-  # AgentCore Analytics Lambda Function
+  # AgentCore MCP Handler Lambda Function
   ##########################################################################
 
-  AgentCoreAnalyticsLambdaLogGroup:
+  AgentCoreMCPHandlerLogGroup:
     Type: AWS::Logs::LogGroup
     Condition: CreateAgentCoreLambda
     Properties:
       KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
       RetentionInDays: !Ref LogRetentionDays
 
-  AgentCoreAnalyticsLambdaFunction:
+  AgentCoreMCPHandlerFunction:
     Type: AWS::Serverless::Function
     Condition: CreateAgentCoreLambda
     Metadata:
       BuildMethod: python3.12
       cfn_nag:
         rules_to_suppress:
+          - id: W11
+            reason: "bedrock-agentcore:InvokeAgentRuntime, aws-marketplace, and logs:DescribeLogGroups APIs do not support resource-level permissions"
           - id: W89
             reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
           - id: W92
             reason: "Function does not require reserved concurrency as it scales based on demand"
-    # checkov:skip=CKV_AWS_116: "DLQ not required for AgentCore analytics function"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AgentCore MCP handler function"
     # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
     # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
     # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-agentcore-analytics"
-      CodeUri: src/lambda/agentcore_analytics_processor/
+      FunctionName: !Sub "${AWS::StackName}-agentcore-mcp-handler"
+      CodeUri: src/lambda/agentcore_mcp_handler/
       Handler: index.lambda_handler
       Runtime: python3.12
       MemorySize: 1024
@@ -856,7 +858,7 @@ Resources:
           SETTINGS_PARAMETER_NAME: !Ref SettingsParameter
           MCP_SERVER_BUCKET: !Ref MCPContentBucket
       LoggingConfig:
-        LogGroup: !Ref AgentCoreAnalyticsLambdaLogGroup
+        LogGroup: !Ref AgentCoreMCPHandlerLogGroup
       Policies:
         - Statement:
             Effect: Allow
@@ -1136,7 +1138,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: lambda:InvokeFunction
-                Resource: !GetAtt AgentCoreAnalyticsLambdaFunction.Arn
+                Resource: !GetAtt AgentCoreMCPHandlerFunction.Arn
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/CloudWatchLogsFullAccess"
       Tags:
@@ -1150,10 +1152,11 @@ Resources:
       ServiceToken: !GetAtt AgentCoreGatewayManagerFunction.Arn
       StackName: !Ref AWS::StackName
       Region: !Ref AWS::Region
-      LambdaArn: !GetAtt AgentCoreAnalyticsLambdaFunction.Arn
+      LambdaArn: !GetAtt AgentCoreMCPHandlerFunction.Arn
       UserPoolId: !Ref UserPool
       ClientId: !Ref ExternalAppClient
       ClientSecret: !GetAtt ExternalAppClient.ClientSecret
+      ConnectorClientId: !Ref MCPConnectorClient
       ExecutionRoleArn: !GetAtt AgentCoreGatewayExecutionRole.Arn
       SourceCodeHash: <LAMBDA_HASH_TOKEN>
 
@@ -1207,7 +1210,6 @@ Resources:
 
   PreviousIDPPatternValue:
     Type: Custom::ReadPreviousIDPPattern
-    DependsOn: SettingsParameter
     Properties:
       ServiceToken: !GetAtt ReadPreviousIDPPatternFunction.Arn
       SettingsParameterName: !Ref SettingsParameter
@@ -1220,7 +1222,6 @@ Resources:
     DependsOn:
       - IsStacknameLengthOK
       - CopyConfigurationFiles
-      - PreviousIDPPatternValue
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: ./patterns/unified/.aws-sam/packaged.yaml
@@ -1299,6 +1300,7 @@ Resources:
         # Background worker ARNs
         AgentChatProcessorFunctionArn: !GetAtt AgentChatProcessorFunction.Arn
         AgentProcessorFunctionArn: !GetAtt AgentProcessorFunction.Arn
+        TestExecutionAggregationFunctionArn: !GetAtt PATTERNSTACK.Outputs.TestExecutionAggregationFunctionArn
         
         # DynamoDB Tables
         TrackingTableName: !Ref TrackingTable
@@ -3209,9 +3211,6 @@ Resources:
 
   BackfillCustomResource:
     Type: Custom::GSIBackfill
-    DependsOn:
-      - TrackingTable
-      - BackfillStateMachine
     Properties:
       ServiceToken: !GetAtt BackfillTriggerFunction.Arn
       TrackingTableName: !Ref TrackingTable
@@ -5063,6 +5062,8 @@ Resources:
     Metadata:
       cfn_nag:
         rules_to_suppress:
+          - id: W11
+            reason: "servicequotas:GetServiceQuota and ListServiceQuotas APIs do not support resource-level permissions"
           - id: W89
             reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
           - id: W92
@@ -5408,7 +5409,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Condition: CreateExternalAppClient
     Properties:
-      ClientName: "External-App-Client"
+      ClientName: "external-app-client"
       UserPoolId: !Ref UserPool
       GenerateSecret: true
       ExplicitAuthFlows:
@@ -5446,6 +5447,33 @@ Resources:
         - https://us-west-2.quicksight.aws.amazon.com/sn/oauthcallback
         - https://eu-west-1.quicksight.aws.amazon.com/sn/oauthcallback
         - https://ap-southeast-2.quicksight.aws.amazon.com/sn/oauthcallback
+
+  MCPResourceServer:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Condition: CreateAgentCoreLambda
+    Properties:
+      UserPoolId: !Ref UserPool
+      Identifier: idp-mcp-connector
+      Name: idp-mcp-connector
+      Scopes:
+        - ScopeName: access
+          ScopeDescription: Full access to IDP MCP Connector
+
+  MCPConnectorClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: CreateAgentCoreLambda
+    DependsOn: MCPResourceServer
+    Properties:
+      ClientName: "mcp-connector-client"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: true
+      AllowedOAuthFlows:
+        - client_credentials
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - idp-mcp-connector/access
+      SupportedIdentityProviders:
+        - COGNITO
 
   ##########################################################################
   # Cognoito user authentication for AppSync API and WebUI
@@ -6665,7 +6693,6 @@ Resources:
         ALBScheme: !Ref ALBScheme
         ALBAllowedCIDRs: !Ref ALBAllowedCIDRs
         WebUIBucketName: !Ref WebUIBucket
-        WebUIBucketArn: !GetAtt WebUIBucket.Arn
         StackName: !Ref AWS::StackName
         PermissionsBoundaryArn: !Ref PermissionsBoundaryArn
         LoggingBucketName: !Ref LoggingBucket
@@ -7408,11 +7435,11 @@ Outputs:
     Value: !GetAtt AgentCoreGateway.GatewayUrl
   MCPClientId:
     Condition: CreateAgentCoreLambda
-    Description: MCP Client ID
+    Description: Cognito client ID for user-based authentication with the IDP MCP server. Used by external applications like Amazon QuickSight that require user password authentication.
     Value: !Ref ExternalAppClient
   MCPClientSecret:
     Condition: CreateAgentCoreLambda
-    Description: MCP Client Secret
+    Description: Cognito client secret for user-based authentication with the IDP MCP server. Used by external applications like Amazon QuickSight that require user password authentication.
     Value: !GetAtt ExternalAppClient.ClientSecret
   MCPUserPool:
     Condition: CreateAgentCoreLambda
@@ -7426,6 +7453,14 @@ Outputs:
     Condition: CreateAgentCoreLambda
     Description: MCP Authorization URL
     Value: !Sub "https://${GetDomain.OutputString}.auth.${AWS::Region}.amazoncognito.com/oauth2/authorize"
+  MCPConnectorClientId:
+    Condition: CreateAgentCoreLambda
+    Description: Cognito client ID used by the MCP Connector for machine-to-machine (M2M) authentication with the IDP system
+    Value: !Ref MCPConnectorClient
+  MCPConnectorClientSecret:
+    Condition: CreateAgentCoreLambda
+    Description: Cognito client secret used by the MCP Connector for machine-to-machine (M2M) authentication with the IDP system
+    Value: !GetAtt MCPConnectorClient.ClientSecret
   MCPContentBucketConsoleURL:
     Description: MCP server content bucket console URL
     Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${MCPContentBucket}

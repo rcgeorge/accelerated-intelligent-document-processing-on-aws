@@ -18,6 +18,7 @@ import {
   RadioGroup,
   ExpandableSection,
   Icon,
+  Badge,
 } from '@cloudscape-design/components';
 import Editor, { type OnMount } from '@monaco-editor/react';
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -2211,17 +2212,30 @@ const ConfigurationLayout = (): React.JSX.Element => {
                   </Button>
                 )}
                 {isAdmin && (
-                  <Button variant="normal" onClick={() => setShowSaveAsVersionModal(true)} disabled={validationErrors.length > 0}>
+                  <Button
+                    variant="normal"
+                    onClick={() => {
+                      setSaveAsVersionName(`copy-of-${currentVersionName}`);
+                      setSaveAsVersionDescription(currentVersion?.description ? `Copy of ${currentVersion.description}` : '');
+                      setShowSaveAsVersionModal(true);
+                    }}
+                    disabled={validationErrors.length > 0}
+                  >
                     Save as Version
                   </Button>
                 )}
-                {/* Save changes - hidden for read-only users, disabled on default version */}
+                {/* Save changes - hidden for read-only users, disabled on default or managed versions */}
                 {canWrite && (
                   <Button
                     variant="primary"
                     onClick={() => handleSave(false)}
                     loading={isSaving}
-                    disabled={!hasUnsavedChanges || validationErrors.length > 0 || currentVersionName === 'default'}
+                    disabled={
+                      !hasUnsavedChanges ||
+                      validationErrors.length > 0 ||
+                      currentVersionName === 'default' ||
+                      currentVersion?.managed === true
+                    }
                   >
                     Save changes
                   </Button>
@@ -2229,9 +2243,18 @@ const ConfigurationLayout = (): React.JSX.Element => {
               </SpaceBetween>
             }
           >
-            Configuration:{' '}
-            {selectedVersion || (activeVersionName && currentVersion?.isActive ? `${activeVersionName} (Active)` : activeVersionName)}
-            {currentVersion?.description ? ` - ${currentVersion.description}` : ''}
+            <SpaceBetween direction="horizontal" size="xs">
+              <span>
+                Configuration: {selectedVersion || activeVersionName}
+                {currentVersion?.description ? ` - ${currentVersion.description}` : ''}
+              </span>
+              {currentVersion?.managed || currentVersionName === 'default' ? (
+                <Badge color="blue">Managed</Badge>
+              ) : (
+                <Badge color="grey">Custom</Badge>
+              )}
+              {currentVersion?.isActive && <Badge color="green">Active</Badge>}
+            </SpaceBetween>
           </Header>
         }
       >
@@ -2242,6 +2265,30 @@ const ConfigurationLayout = (): React.JSX.Element => {
                 <Spinner size="normal" />
                 <Box margin={{ left: 's' }}>Refreshing data from server</Box>
               </Box>
+            </Alert>
+          )}
+
+          {(currentVersion?.managed === true || currentVersionName === 'default') && (
+            <Alert
+              type="warning"
+              header="Read-only — Stack-managed configuration"
+              action={
+                isAdmin ? (
+                  <Button
+                    variant="normal"
+                    onClick={() => {
+                      setSaveAsVersionName(`copy-of-${currentVersionName}`);
+                      setSaveAsVersionDescription(currentVersion?.description ? `Copy of ${currentVersion.description}` : '');
+                      setShowSaveAsVersionModal(true);
+                    }}
+                  >
+                    Save as Version
+                  </Button>
+                ) : undefined
+              }
+            >
+              This configuration is managed by the stack and cannot be saved directly. It will be overwritten on stack updates. Use{' '}
+              <strong>Save as Version</strong> to create an editable copy.
             </Alert>
           )}
 

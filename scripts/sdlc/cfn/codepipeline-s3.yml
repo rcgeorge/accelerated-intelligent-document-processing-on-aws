@@ -122,6 +122,8 @@ Resources:
     Metadata:
       cfn_nag:
         rules_to_suppress:
+          - id: F3
+            reason: "CodeBuild role requires broad permissions for dynamic deployment operations. Scoped to SDLC pipeline only. All operations logged in CloudTrail."
           - id: W11
             reason: "Some IAM List/Get operations and service-linked roles require wildcard resources"
     Properties:
@@ -310,6 +312,8 @@ Resources:
                 - export IDP_ADMIN_EMAIL=$(aws s3api head-object --bucket ${SOURCE_BUCKET} --key deploy/code.zip --query 'Metadata."gitlab-user-email"' --output text 2>/dev/null || echo "")
                 - make setup || { echo "IDP Common and IDP CLI installation failed"; exit 1; }
                 - pip install rich || echo "Rich installation failed, using fallback formatting"
+                - export PATH="$PWD/.venv/bin:$PATH"
+                - which idp-cli || { echo "idp-cli not found in PATH"; exit 1; }
             build:
               commands:
                 - python3 scripts/sdlc/codebuild_deployment.py
@@ -421,6 +425,20 @@ Resources:
               - 'bedrock:InvokeModel'
             Resource: 
               - !Sub 'arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0'
+          - Effect: Allow
+            Action:
+              - 'bedrock:CreateBlueprint'
+              - 'bedrock:CreateBlueprintVersion'
+              - 'bedrock:UpdateBlueprint'
+              - 'bedrock:DeleteBlueprint'
+              - 'bedrock:GetBlueprint'
+              - 'bedrock:CreateDataAutomationProject'
+              - 'bedrock:UpdateDataAutomationProject'
+              - 'bedrock:GetDataAutomationProject'
+              - 'bedrock:DeleteDataAutomationProject'
+            Resource:
+              - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:blueprint/*'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-project/*'
 
   CodeBuildKMSPolicy:
     Type: 'AWS::IAM::Policy'

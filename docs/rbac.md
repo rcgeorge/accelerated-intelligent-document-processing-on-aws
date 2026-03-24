@@ -164,7 +164,7 @@ mutation UpdateUser($userId: ID!, $allowedConfigVersions: [String]) {
 
 ### Layer 1: AppSync Schema Auth Directives (Server-Side)
 
-Every GraphQL **mutation** has `@aws_auth(cognito_groups: [...])` directives that enforce write access at the AppSync level. If a user's Cognito group is not in the allowed list, AppSync returns an **Unauthorized** error before any resolver code runs.
+Every GraphQL **mutation** and many **queries** have `@aws_auth(cognito_groups: [...])` directives that enforce access at the AppSync level. If a user's Cognito group is not in the allowed list, AppSync returns an **Unauthorized** error before any resolver code runs.
 
 **Key mutations and their allowed roles:**
 
@@ -175,14 +175,32 @@ Every GraphQL **mutation** has `@aws_auth(cognito_groups: [...])` directives tha
 | `updatePricing`, `restoreDefaultPricing` | Admin |
 | `deleteDocument`, `updateConfiguration`, `setActiveVersion` | Admin, Author |
 | `uploadDocument`, `reprocessDocument`, `abortWorkflow` | Admin, Author |
-| `startTestRun`, `addTestSet`, `deleteTests` | Admin, Author |
-| `syncBdaIdp`, `uploadDiscoveryDocument` | Admin, Author |
-| `processChanges`, `completeSectionReview`, `claimReview` | Admin, Reviewer |
-| `sendAgentChatMessage`, `deleteChatSession` | All authenticated users |
+| `startTestRun`, `addTestSet`, `addTestSetFromUpload`, `deleteTests`, `deleteTestSets` | Admin, Author |
+| `syncBdaIdp`, `uploadDiscoveryDocument`, `deleteDiscoveryJob`, `autoDetectSections` | Admin, Author |
+| `copyToBaseline` | Admin, Author |
+| `processChanges`, `completeSectionReview`, `claimReview`, `releaseReview`, `skipAllSectionsReview` | Admin, Reviewer |
+| `sendAgentChatMessage`, `deleteChatSession`, `updateChatSessionTitle`, `deleteAgentJob` | All authenticated users (see note below) |
+| `updateAgentChatMessage` | All authenticated users (also IAM for backend) |
 
-**Important**: `@aws_auth` directives are applied to **Mutations only**, not Queries. Read access for Queries is controlled by:
-- **UI navigation** (which features are visible per role)
-- **Server-side resolver filtering** (e.g., reviewer document filtering, config-version scoping)
+> **AppSync Limitation**: Agent Chat mutations and queries require both `@aws_cognito_user_pools` and `@aws_iam` (for backend Lambda calls and return type resolution). AppSync does not support `@aws_auth(cognito_groups: [...])` combined with `@aws_iam` on the same field — it causes "Not Authorized" errors for all users. Therefore, Agent Chat mutations (`sendAgentChatMessage`, `deleteChatSession`, etc.) and queries (`listAvailableAgents`, `listChatSessions`, `getChatMessages`) use `@aws_cognito_user_pools @aws_iam` instead. Reviewer exclusion from Agent Chat is enforced via **UI navigation** (Agent Chat page is hidden for Reviewer) and **session scoping** (each user only sees their own sessions).
+
+**Key queries and their allowed roles:**
+
+| Query | Allowed Roles |
+|-------|---------------|
+| `getDocument`, `listDocuments`, `listDocumentsByDateRange`, etc. | All authenticated (server-side filtering in resolvers) |
+| `getFileContents`, `getStepFunctionExecution` | All authenticated |
+| `getConfigVersions`, `getConfigVersion`, `getPricing`, `calculateCapacity` | Admin, Author, Viewer |
+| `listAvailableAgents`, `listChatSessions`, `getChatMessages`, `getAgentChatMessages` | All authenticated (UI-enforced, see AppSync limitation above) |
+| `submitAgentQuery`, `getAgentJobStatus`, `listAgentJobs` | Admin, Author, Viewer |
+| `listConfigurationLibrary`, `getConfigurationLibraryFile` | Admin, Author, Viewer |
+| `listDiscoveryJobs` | Admin, Author |
+| `getTestRun`, `getTestRuns`, `getTestRunStatus`, `compareTestRuns`, `getTestSets`, `listBucketFiles`, `validateTestFileName` | Admin, Author |
+| `queryKnowledgeBase`, `chatWithDocument` | All authenticated |
+| `listUsers` | All authenticated (non-admin sees only self in resolver) |
+| `getMyProfile` | All authenticated |
+
+**Note**: The `updateConfiguration` mutation is schema-level restricted to Admin+Author, but the resolver additionally enforces that `saveAsVersion` and `saveAsDefault` operations within that mutation are **Admin-only**.
 
 ### Layer 2: Server-Side Resolver Filtering
 

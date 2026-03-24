@@ -192,7 +192,7 @@ class IDPClient:
 
     def _get_stack_resources(self, stack_name: Optional[str] = None) -> Dict[str, str]:
         """Get stack resources with caching."""
-        from idp_sdk.core.stack_info import StackInfo
+        from idp_sdk._core.stack_info import StackInfo
 
         name = self._require_stack(stack_name)
 

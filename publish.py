@@ -507,7 +507,7 @@ STDERR:
     def check_prerequisites(self):
         """Check for required commands and versions"""
         # Check required commands
-        required_commands = ["aws", "sam"]
+        required_commands = ["aws", "sam", "uv"]
         for cmd in required_commands:
             if not shutil.which(cmd):
                 self.console.print(
@@ -937,7 +937,7 @@ STDERR:
                 CFLoader.add_constructor(func, construct_unknown)
 
             with open(template_path, "r", encoding="utf-8") as f:
-                template = yaml.load(f, Loader=CFLoader)
+                template = yaml.load(f, Loader=CFLoader)  # nosec B506 - CFLoader required for CloudFormation intrinsic functions
 
             if not template or not isinstance(template, dict):
                 raise Exception(f"Failed to parse YAML template: {template_path}")
@@ -2123,23 +2123,24 @@ STDERR:
             else:
                 install_spec = "./lib/idp_common_pkg"
 
-            # Install dependencies into layer python directory
+            # Install dependencies into layer python directory using uv
             # Use platform-specific flags to ensure x86_64 Lambda compatibility
             # regardless of the local machine's architecture (e.g., ARM64 Mac)
+            # Note: uv is used instead of pip because uv-created venvs don't include pip,
+            # and uv handles package installation directly without needing pip in the venv.
             cmd = [
-                sys.executable,
-                "-m",
+                "uv",
                 "pip",
                 "install",
                 install_spec,
-                "--platform",
-                "manylinux2014_x86_64",
-                "--implementation",
-                "cp",
+                "--python-platform",
+                "x86_64-manylinux2014",
                 "--python-version",
-                "312",
+                "3.12",
                 "--only-binary=:all:",
-                "-t",
+                "--no-binary",
+                "idp-common",
+                "--target",
                 layer_python_dir,
                 "--upgrade",
             ]
@@ -2353,7 +2354,7 @@ STDERR:
         )
 
         # Map each layer name to its zip file
-        expected_layers = ["base", "reporting", "agents"]
+        expected_layers = ["base", "evaluation", "reporting", "agents"]
         for layer_name in expected_layers:
             # Find the zip for this layer (format: idp-common-{name}-{source_hash}.zip)
             # Match based on current source hash to ensure we use up-to-date layers
@@ -2446,8 +2447,8 @@ STDERR:
             )
             return True  # Need rebuild
 
-        # We have at least some layer zips, check we have all 3
-        expected_layers = ["base", "reporting", "agents"]
+        # We have at least some layer zips, check we have all 4
+        expected_layers = ["base", "evaluation", "reporting", "agents"]
         for layer_name in expected_layers:
             found = any(f"idp-common-{layer_name}-" in z for z in layer_zips)
             if not found:
@@ -2469,9 +2470,15 @@ STDERR:
         # Ensure layers directory exists
         os.makedirs(".aws-sam/layers", exist_ok=True)
 
-        # Define the 3 layers
+        # Define the 4 layers
         layers_config = {
-            "base": ["docs_service", "image"],
+            "base": [
+                "docs_service",
+                "image",
+            ],
+            "evaluation": [
+                "evaluation"
+            ],  # Separate layer for stickler (includes numpy)
             "reporting": ["reporting"],
             "agents": ["agents"],
         }

@@ -1536,6 +1536,8 @@
       Description: GraphQL resolver for test results queries
       MemorySize: 512
       Timeout: 300
+      Layers:
+        - !Ref IDPCommonBaseLayerArn
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel

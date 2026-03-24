@@ -39,6 +39,7 @@ https://github.com/user-attachments/assets/3d448a74-ba5b-4a4a-96ad-ec03ac0b4d7d
   - [list-batches](#list-batches)
   - [stop-workflows](#stop-workflows)
   - [load-test](#load-test)
+  - [discover](#discover)
   - [remove-deleted-stack-resources](#remove-deleted-stack-resources)
   - [config-create](#config-create)
   - [config-validate](#config-validate)
@@ -66,7 +67,7 @@ https://github.com/user-attachments/assets/3d448a74-ba5b-4a4a-96ad-ec03ac0b4d7d
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.12 or higher
 - AWS credentials configured (via AWS CLI or environment variables)
 - An active IDP Accelerator CloudFormation stack
 
@@ -269,7 +270,7 @@ idp-cli delete [OPTIONS]
 - `--force`: Skip confirmation prompt
 - `--empty-buckets`: Empty S3 buckets before deletion (required if buckets contain data)
 - `--force-delete-all`: Force delete ALL remaining resources after CloudFormation deletion (S3 buckets, CloudWatch logs, DynamoDB tables)
-- `--wait / --no-wait`: Wait for deletion to complete (default: wait)
+- `--wait`: Wait for deletion to complete (default: no-wait)
 - `--region`: AWS region (optional)
 
 **S3 Bucket Behavior:**
@@ -1085,7 +1086,20 @@ Validate a manifest file without processing.
 
 **Usage:**
 ```bash
+idp-cli validate-manifest [OPTIONS]
+```
+
+**Options:**
+- `--manifest` (required): Path to manifest file to validate (CSV or JSON)
+
+**Examples:**
+
+```bash
+# Validate a CSV manifest
 idp-cli validate-manifest --manifest documents.csv
+
+# Validate a JSON manifest
+idp-cli validate-manifest --manifest documents.json
 ```
 
 ---
@@ -1096,7 +1110,25 @@ List recent batch processing jobs.
 
 **Usage:**
 ```bash
-idp-cli list-batches --stack-name my-stack --limit 10
+idp-cli list-batches [OPTIONS]
+```
+
+**Options:**
+- `--stack-name` (required): CloudFormation stack name
+- `--limit`: Maximum number of batches to list (default: 10)
+- `--region`: AWS region (optional)
+
+**Examples:**
+
+```bash
+# List last 10 batches (default)
+idp-cli list-batches --stack-name my-stack
+
+# List last 5 batches
+idp-cli list-batches --stack-name my-stack --limit 5
+
+# List with specific region
+idp-cli list-batches --stack-name my-stack --limit 20 --region us-west-2
 ```
 
 ---
@@ -1799,17 +1831,21 @@ idp-cli config-validate [OPTIONS]
 ```
 
 **Options:**
-- `--custom-config` (required): Path to configuration file to validate
+- `--config-file`, `-f` (required): Path to configuration file to validate
 - `--show-merged`: Show the full merged configuration
+- `--strict`: Fail validation if config contains unknown or deprecated fields
 
 **Examples:**
 
 ```bash
 # Validate a config file
-idp-cli config-validate --custom-config ./my-config.yaml
+idp-cli config-validate --config-file ./my-config.yaml
 
 # Show full merged config
-idp-cli config-validate --custom-config ./config.yaml --show-merged
+idp-cli config-validate --config-file ./config.yaml --show-merged
+
+# Strict mode (fails if config has unknown or deprecated fields — useful for CI/CD)
+idp-cli config-validate --config-file ./config.yaml --strict
 ```
 
 ---
@@ -1861,7 +1897,7 @@ idp-cli config-upload [OPTIONS]
 - `--stack-name` (required): CloudFormation stack name
 - `--config-file`, `-f` (required): Path to configuration file (YAML or JSON)
 - `--validate/--no-validate`: Validate config before uploading (default: validate)
-- `--config-version`: Configuration version to update (e.g., v1, v2). If version doesn't exist, it will be created
+- `--config-version` (required): Configuration version to update (e.g., `default`, `v1`, `v2`). If the version doesn't exist, it will be created automatically.
 - `--version-description`: Description for the configuration version (used when creating new versions)
 - `--region`: AWS region (optional)
 
@@ -1869,7 +1905,7 @@ idp-cli config-upload [OPTIONS]
 
 ```bash
 # Upload config to active version
-idp-cli config-upload --stack-name my-stack --config-file ./config.yaml
+idp-cli config-upload --stack-name my-stack --config-file ./config.yaml --config-version default
 
 # Update existing version
 idp-cli config-upload --stack-name my-stack --config-file ./config.yaml --config-version Production
@@ -1988,7 +2024,6 @@ idp-cli config-delete --stack-name my-stack --config-version old-version --force
 6. Configuration is immediately available for document processing
 
 **Configuration Versioning:**
-- **No version specified**: Updates the currently active version
 - **Existing version**: Saves the uploaded configuration as the full version snapshot
 - **New version**: Creates a new independent version with the uploaded configuration
 - **Version descriptions**: Can be added to new versions for better organization
@@ -2024,6 +2059,9 @@ idp-cli discover -d ./invoice.pdf -g ./invoice.json
 # Save schema to file
 idp-cli discover -d ./form.pdf -o ./form-schema.json
 
+# With class name hint (guides LLM to use specific class name)
+idp-cli discover -d ./form.pdf --class-hint "W2 Tax Form"
+
 # Batch with auto-matched ground truth
 idp-cli discover -d ./invoice.pdf -d ./w2.pdf -g ./invoice.json -g ./w2.json
 
@@ -2032,6 +2070,22 @@ idp-cli discover -d ./invoice.pdf -d ./w2.pdf -o ./schemas/
 
 # Batch output to single file (JSON array)
 idp-cli discover -d ./invoice.pdf -d ./w2.pdf -o ./all-schemas.json
+
+# Multi-section: discover specific page ranges from a single PDF
+idp-cli discover -d ./lending_package.pdf \
+    --page-range "1-2" --page-label "Cover Letter" \
+    --page-range "3-5" --page-label "W2 Form" \
+    --page-range "6-8" --page-label "Bank Statement" \
+    -o ./schemas/
+
+# Auto-detect sections then discover each
+idp-cli discover -d ./lending_package.pdf --auto-detect -o ./schemas/
+
+# Only detect section boundaries (no discovery)
+idp-cli discover -d ./lending_package.pdf --auto-detect --detect-only
+
+# Auto-detect with output to file
+idp-cli discover -d ./lending_package.pdf --auto-detect --detect-only -o sections.json
 
 # Stack mode (saves to config)
 idp-cli discover --stack-name my-stack -d ./invoice.pdf --config-version v2
@@ -2044,7 +2098,49 @@ idp-cli discover --stack-name my-stack -d ./invoice.pdf --config-version v2
 | `-g, --ground-truth` | Path to JSON ground truth file(s) (repeatable, auto-matched by filename stem) |
 | `--config-version` | Config version to save to (stack mode only) |
 | `-o, --output` | Output path: file (single/JSON array) or directory (one file per schema) |
+| `--class-hint` | Hint for the document class name (e.g., "W2 Form"). The LLM will use this as `$id`. |
+| `--page-range` | Page range to discover (e.g., "1-3"). Repeatable for multi-section. Requires PDF. |
+| `--page-label` | Label for corresponding `--page-range` (e.g., "W2 Form"). Used as class name hint per range. |
+| `--auto-detect` | Auto-detect document section boundaries using AI, then discover each section. |
+| `--detect-only` | Only detect section boundaries (use with `--auto-detect`). Prints boundaries without running discovery. |
 | `--region` | AWS region |
+
+---
+
+### `config-sync-bda`
+
+Synchronize IDP document class schemas with BDA (Bedrock Data Automation) blueprints.
+
+**Usage:**
+```bash
+idp-cli config-sync-bda [OPTIONS]
+```
+
+**Options:**
+- `--stack-name` (required): CloudFormation stack name
+- `--direction`: Sync direction — `bidirectional` (default), `bda-to-idp`, or `idp-to-bda`
+- `--mode`: Sync mode — `replace` (default, full alignment) or `merge` (additive, don't delete)
+- `--config-version`: Configuration version to sync (default: active version)
+- `--region`: AWS region (optional)
+
+**Examples:**
+
+```bash
+# Bidirectional sync (default)
+idp-cli config-sync-bda --stack-name my-stack
+
+# Import BDA blueprints into IDP config
+idp-cli config-sync-bda --stack-name my-stack --direction bda-to-idp
+
+# Push IDP classes to BDA blueprints
+idp-cli config-sync-bda --stack-name my-stack --direction idp-to-bda
+
+# Merge mode (additive — don't remove existing items)
+idp-cli config-sync-bda --stack-name my-stack --direction bda-to-idp --mode merge
+
+# Sync specific config version
+idp-cli config-sync-bda --stack-name my-stack --config-version v2
+```
 
 ---
 

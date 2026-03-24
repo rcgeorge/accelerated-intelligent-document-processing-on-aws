@@ -183,6 +183,22 @@ def handler(event, context):
                         "message": "Description cannot exceed 200 characters",
                     },
                 }
+            # RBAC: "Save as Version" and "Save as Default" are Admin-only operations.
+            # The updateConfiguration mutation allows Admin+Author at the schema level,
+            # but saveAsVersion and saveAsDefault flags require Admin role.
+            if custom_config:
+                config_data = json.loads(custom_config) if isinstance(custom_config, str) else custom_config
+                is_save_as_version = config_data.get("saveAsVersion", False)
+                is_save_as_default = config_data.get("saveAsDefault", False)
+                if (is_save_as_version or is_save_as_default) and not caller["is_admin"]:
+                    operation_name = "Save as Version" if is_save_as_version else "Save as Default"
+                    return {
+                        "success": False,
+                        "error": {
+                            "type": "Unauthorized",
+                            "message": f"Access denied: '{operation_name}' is an Admin-only operation",
+                        },
+                    }
             success = manager.handle_update_custom_configuration(custom_config, version, description)
             return {
                 "success": success,
@@ -818,6 +834,20 @@ def handle_delete_config_version(manager, version, delete_bda_project=True):
                     "message": "Cannot delete system default version",
                 },
             }
+        
+        # Prevent deletion of stack-managed versions
+        try:
+            existing_config = manager.get_configuration("Config", version)
+            if existing_config and getattr(existing_config, 'managed', False):
+                return {
+                    "success": False,
+                    "error": {
+                        "type": "ValidationError",
+                        "message": f"Cannot delete stack-managed version '{version}'",
+                    },
+                }
+        except Exception as e:
+            logger.warning(f"Error checking managed status for version {version}: {e}")
         
         # Check for linked BDA project and optionally delete it
         bda_cleanup_message = ""

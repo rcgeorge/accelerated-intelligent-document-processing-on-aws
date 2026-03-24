@@ -56,7 +56,7 @@ This folder contains detailed documentation on various aspects of the GenAI Inte
 - [Code Intelligence](./code-intelligence.md) - Chat bot for asking questions about the IDP code base and features
 - [Knowledge Base](./knowledge-base.md) - Document knowledge base query feature
 - [Custom MCP Agent](./custom-MCP-agent.md) - Integrating external MCP servers for custom tools and capabilities
-- [MCP Integration](./mcp-integration.md) - Model Context Protocol integration for external applications
+- [MCP Server](./mcp-server.md) - Model Context Protocol integration for external applications
 
 ## Integration & Extensions
 
