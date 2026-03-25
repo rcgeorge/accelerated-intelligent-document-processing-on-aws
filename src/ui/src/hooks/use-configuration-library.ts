@@ -48,7 +48,7 @@ const useConfigurationLibrary = (): UseConfigurationLibraryReturn => {
       }
 
       logger.debug('Configurations listed successfully:', response.items);
-      return (response.items?.filter((item): item is NonNullable<typeof item> => item !== null) ?? []).map((item) => ({
+      return (response.items?.filter((item: any): item is NonNullable<typeof item> => item !== null) ?? []).map((item: any) => ({
         ...item,
         configFileType: item.configFileType ?? undefined,
       }));

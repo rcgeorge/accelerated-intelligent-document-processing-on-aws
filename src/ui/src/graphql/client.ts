@@ -16,9 +16,11 @@ import { createApolloClient } from './apollo-adapter';
 
 const DEPLOYMENT_MODE = import.meta.env.VITE_DEPLOYMENT_MODE || 'Standard';
 
-// Use the Amplify client type so all existing call sites type-check without changes.
-// The Apollo adapter is structurally compatible at runtime.
-type GraphQLClient = ReturnType<typeof generateClient>;
+// Unified client interface that works with both Amplify and Apollo adapters.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface GraphQLClient {
+  graphql(options: any): any;
+}
 
 let _client: GraphQLClient | null = null;
 

@@ -59,7 +59,7 @@ const useUserRole = (): UserRoleReturn => {
             const result = await client.graphql({ query: getMyProfile });
             const profile = result.data.getMyProfile;
             if (profile?.allowedConfigVersions && profile.allowedConfigVersions.length > 0) {
-              const versions = profile.allowedConfigVersions.filter((v): v is string => v !== null);
+              const versions = profile.allowedConfigVersions.filter((v: any): v is string => v !== null);
               setAllowedConfigVersions(versions.length > 0 ? versions : null);
             }
           } catch (profileErr) {

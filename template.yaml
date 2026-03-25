@@ -861,6 +861,8 @@ Resources:
           STRANDS_LOG_LEVEL: !Ref LogLevel
           AGENT_TABLE: !Ref AgentTable
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           ATHENA_DATABASE: !Ref ReportingDatabase
           ATHENA_WORKGROUP: primary
           QUERY_RESULTS_BUCKET: !If
@@ -3796,6 +3798,8 @@ Resources:
           LOG_LEVEL: !Ref LogLevel
           QUEUE_URL: !Ref DocumentQueue
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
           OUTPUT_BUCKET: !Ref OutputBucket
           CONFIG_TABLE: !Ref ConfigurationTable
@@ -3804,6 +3808,11 @@ Resources:
             QueueName: !GetAtt DocumentQueue.QueueName
         - DynamoDBReadPolicy:
             TableName: !Ref ConfigurationTable
+        - !If
+          - UseApolloServer
+          - DynamoDBCrudPolicy:
+              TableName: !Ref TrackingTable
+          - !Ref AWS::NoValue
         - S3ReadPolicy:
             BucketName: !Ref InputBucket
         - Statement:
@@ -3878,6 +3887,8 @@ Resources:
           LOG_LEVEL: !Ref LogLevel
           STATE_MACHINE_ARN: !GetAtt PATTERNSTACK.Outputs.StateMachineArn
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           MAX_CONCURRENT: !Ref MaxConcurrentWorkflows
           WORKING_BUCKET: !Ref WorkingBucket
@@ -4001,6 +4012,8 @@ Resources:
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           METRIC_NAMESPACE: !Ref AWS::StackName
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           OUTPUT_BUCKET: !Ref OutputBucket
           REPORTING_BUCKET:
             !If [
@@ -4931,6 +4944,8 @@ Resources:
           MAX_MESSAGE_SIZE_KB: 8.5
           DATA_RETENTION_DAYS: !Ref DataRetentionInDays
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
             - UseApolloServer
             - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ws-publisher"
@@ -5401,6 +5416,8 @@ Resources:
           STRANDS_LOG_LEVEL: !Ref LogLevel
           AGENT_TABLE: !Ref AgentTable
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
           WEBSOCKET_PUBLISHER_FUNCTION_ARN: !If
             - UseApolloServer
             - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ws-publisher"
@@ -6684,6 +6701,8 @@ Resources:
           DISCOVERY_TRACKING_TABLE: !Ref DiscoveryTrackingTable
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
           APPSYNC_API_URL: !If [UseAppSync, !GetAtt GraphQLApi.GraphQLUrl, ""]
+          DOCUMENT_TRACKING_MODE: !If [UseAppSync, "appsync", "dynamodb"]
+          TRACKING_TABLE: !Ref TrackingTable
       LoggingConfig:
         LogGroup: !Ref DiscoveryProcessorFunctionLogGroup
       Events:

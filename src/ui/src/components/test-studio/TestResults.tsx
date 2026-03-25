@@ -631,7 +631,7 @@ const TestResults = ({ testRunId, setSelectedTestRunId }: TestResultsProps): Rea
       });
 
       const testSets = testSetsResult.data.getTestSets || [];
-      const testSet = testSets.find((ts) => ts?.id === results.testSetId);
+      const testSet = testSets.find((ts: any) => ts?.id === results.testSetId);
 
       if (testSet) {
         setTestSetStatus(testSet.status ?? null);

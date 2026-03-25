@@ -85,8 +85,8 @@ const TestSets = (): React.JSX.Element => {
 
       // Upsert: merge backend data with existing UI state, deduplicating by id
       setTestSets((prevTestSets) => {
-        const nonNullBackendTestSets = backendTestSets.filter((ts): ts is NonNullable<typeof ts> => ts !== null);
-        const backendIds = new Set(nonNullBackendTestSets.map((ts) => ts.id));
+        const nonNullBackendTestSets = backendTestSets.filter((ts: any): ts is NonNullable<typeof ts> => ts !== null);
+        const backendIds = new Set(nonNullBackendTestSets.map((ts: any) => ts.id));
 
         // Keep UI test sets that don't exist in backend (active processing)
         const uiOnlyTestSets = prevTestSets.filter((ts) => !backendIds.has(ts.id) && ts.status !== 'COMPLETED' && ts.status !== 'FAILED');
@@ -164,7 +164,7 @@ const TestSets = (): React.JSX.Element => {
         },
       });
 
-      const files = (result.data.listBucketFiles || []).filter((f): f is string => f !== null);
+      const files = (result.data.listBucketFiles || []).filter((f: any): f is string => f !== null);
       setMatchingFiles(files);
       setFileCount(files.length);
       setShowFilesModal(true);
@@ -417,7 +417,7 @@ const TestSets = (): React.JSX.Element => {
     setSuccessMessage('');
     try {
       const result = await client.graphql({ query: getTestSets });
-      setTestSets((result.data.getTestSets || []).filter((ts): ts is NonNullable<typeof ts> => ts !== null));
+      setTestSets((result.data.getTestSets || []).filter((ts: any): ts is NonNullable<typeof ts> => ts !== null));
     } catch (err) {
       console.error('Error refreshing test sets:', err);
       const errorMessage = getErrorMessage(err);

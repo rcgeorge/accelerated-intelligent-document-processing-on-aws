@@ -83,7 +83,7 @@ const TroubleshootModal = ({
           variables: { jobId: id },
         })
         .subscribe({
-          next: async (message) => {
+          next: async (message: any) => {
             const jobCompleted = message.data?.onAgentJobComplete;
             logger.debug('Job completion notification:', jobCompleted);
 

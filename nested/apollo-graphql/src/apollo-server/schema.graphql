@@ -9,6 +9,17 @@ scalar JSON
 scalar DateTime
 scalar Timestamp
 
+# AppSync scalar aliases — the UI's generated queries reference these types.
+# They are mapped to the same resolvers as their standard counterparts.
+scalar AWSDateTime
+scalar AWSDate
+scalar AWSTimestamp
+scalar AWSJSON
+scalar AWSEmail
+scalar AWSIPAddress
+scalar AWSURL
+scalar AWSPhone
+
 type CapacityResult {
   success: Boolean!
   errorMessage: String
@@ -62,7 +73,7 @@ type CalculationDetails {
 }
 
 type QuotasUsed {
-  bedrock_models: JSON
+  bedrock_models: AWSJSON
 }
 
 type Document {
@@ -70,16 +81,16 @@ type Document {
   SK: ID!
   ObjectKey: ID
   ObjectStatus: String
-  InitialEventTime: DateTime
-  QueuedTime: DateTime
-  WorkflowStartTime: DateTime
-  CompletionTime: DateTime
+  InitialEventTime: AWSDateTime
+  QueuedTime: AWSDateTime
+  WorkflowStartTime: AWSDateTime
+  CompletionTime: AWSDateTime
   WorkflowExecutionArn: String
   WorkflowStatus: String
   PageCount: Int
   Sections: [Section]
   Pages: [Page]
-  Metering: JSON
+  Metering: AWSJSON
   EvaluationReportUri: String
   EvaluationStatus: String
   SummaryReportUri: String
@@ -96,7 +107,7 @@ type Document {
   HITLReviewOwnerEmail: String
   HITLReviewedBy: String
   HITLReviewedByEmail: String
-  HITLReviewHistory: JSON
+  HITLReviewHistory: AWSJSON
   ConfidenceAlertCount: Int
   ConfigVersion: String
   TraceId: String
@@ -133,7 +144,7 @@ type DocumentListItem {
   PK: ID!
   SK: ID!
   ObjectKey: ID
-  InitialEventTime: DateTime
+  InitialEventTime: AWSDateTime
   ExpiresAfter: Timestamp
   HITLStatus: String
   HITLReviewURL: String
@@ -146,7 +157,7 @@ type User {
   email: String!
   persona: String!
   status: String
-  createdAt: DateTime
+  createdAt: AWSDateTime
   allowedConfigVersions: [String]
 }
 
@@ -168,17 +179,17 @@ type ConfigurationError {
 
 type ConfigurationResponse {
   success: Boolean!
-  Schema: JSON
-  Default: JSON
-  Custom: JSON
+  Schema: AWSJSON
+  Default: AWSJSON
+  Custom: AWSJSON
   error: ConfigurationError
 }
 
 type ConfigurationVersion {
   versionName: String!
   isActive: Boolean
-  createdAt: DateTime
-  updatedAt: DateTime
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
   description: String
   managed: Boolean
   bdaProjectArn: String
@@ -211,8 +222,8 @@ type SyncBdaIdpResponse {
 
 type PricingResponse {
   success: Boolean!
-  pricing: JSON
-  defaultPricing: JSON
+  pricing: AWSJSON
+  defaultPricing: AWSJSON
   error: ConfigurationError
 }
 
@@ -264,8 +275,8 @@ type DiscoveryJobListItem {
 input CreateDocumentInput {
   ObjectKey: ID
   ObjectStatus: String
-  InitialEventTime: DateTime
-  QueuedTime: DateTime
+  InitialEventTime: AWSDateTime
+  QueuedTime: AWSDateTime
   ExpiresAfter: Timestamp
   ConfigVersion: String
   TraceId: String
@@ -292,15 +303,15 @@ type DisPresignedUrlResponse {
 input UpdateDocumentInput {
   ObjectKey: ID!
   ObjectStatus: String
-  QueuedTime: DateTime
-  WorkflowStartTime: DateTime
-  CompletionTime: DateTime
+  QueuedTime: AWSDateTime
+  WorkflowStartTime: AWSDateTime
+  CompletionTime: AWSDateTime
   WorkflowExecutionArn: String
   WorkflowStatus: String
   PageCount: Int
   Sections: [SectionInput]
   Pages: [PageInput]
-  Metering: JSON
+  Metering: AWSJSON
   EvaluationReportUri: String
   EvaluationStatus: String
   SummaryReportUri: String
@@ -316,7 +327,7 @@ input UpdateDocumentInput {
   HITLReviewOwnerEmail: String
   HITLReviewedBy: String
   HITLReviewedByEmail: String
-  HITLReviewHistory: JSON
+  HITLReviewHistory: AWSJSON
   ConfidenceAlertCount: Int
   ConfigVersion: String
   TraceId: String
@@ -403,10 +414,10 @@ type StepFunctionExecutionStep {
   name: String!
   type: String!
   status: String!
-  startDate: DateTime
-  stopDate: DateTime
-  input: JSON
-  output: JSON
+  startDate: AWSDateTime
+  stopDate: AWSDateTime
+  input: AWSJSON
+  output: AWSJSON
   error: String
   mapIterations: Int
   mapIterationDetails: [StepFunctionExecutionStep]
@@ -415,10 +426,10 @@ type StepFunctionExecutionStep {
 type StepFunctionExecutionResponse {
   executionArn: String!
   status: String!
-  startDate: DateTime
-  stopDate: DateTime
-  input: JSON
-  output: JSON
+  startDate: AWSDateTime
+  stopDate: AWSDateTime
+  input: AWSJSON
+  output: AWSJSON
   error: String
   steps: [StepFunctionExecutionStep]
 }
@@ -443,8 +454,8 @@ type AgentJob {
   status: String!
   query: String!
   agentIds: String
-  createdAt: DateTime!
-  completedAt: DateTime
+  createdAt: AWSDateTime!
+  completedAt: AWSDateTime
   result: String
   error: String
   agent_messages: String
@@ -474,29 +485,29 @@ type TestRun {
   completedFiles: Int
   failedFiles: Int
   overallAccuracy: Float
-  weightedOverallScores: JSON
+  weightedOverallScores: AWSJSON
   averageConfidence: Float
-  accuracyBreakdown: JSON
-  confusionMatrix: JSON
-  fieldMetrics: JSON
-  splitClassificationMetrics: JSON
+  accuracyBreakdown: AWSJSON
+  confusionMatrix: AWSJSON
+  fieldMetrics: AWSJSON
+  splitClassificationMetrics: AWSJSON
   totalCost: Float
-  costBreakdown: JSON
-  createdAt: DateTime
-  completedAt: DateTime
+  costBreakdown: AWSJSON
+  createdAt: AWSDateTime
+  completedAt: AWSDateTime
   context: String
   configVersion: String
-  config: JSON
+  config: AWSJSON
 }
 
 type TestRunComparison {
-  metrics: JSON!
+  metrics: AWSJSON!
   configs: [ConfigSetting]
 }
 
 type ConfigSetting {
   setting: String!
-  values: JSON!
+  values: AWSJSON!
 }
 
 type TestSetValidationResponse {
@@ -511,7 +522,7 @@ type TestSet {
   filePattern: String
   fileCount: Int
   status: String
-  createdAt: DateTime!
+  createdAt: AWSDateTime!
   error: String
 }
 
@@ -570,8 +581,8 @@ input ToolMetadataInput {
 type ChatSession {
   sessionId: ID!
   title: String!
-  createdAt: DateTime!
-  updatedAt: DateTime!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
   messageCount: Int!
   lastMessage: String
 }
@@ -632,10 +643,10 @@ type Mutation {
 
   # Admin + Author operations
   deleteDocument(objectKeys: [String!]!): Boolean!
-  updateConfiguration(versionName: String!, customConfig: JSON!, description: String): UpdateConfigurationResponse
+  updateConfiguration(versionName: String!, customConfig: AWSJSON!, description: String): UpdateConfigurationResponse
   setActiveVersion(versionName: String!): UpdateConfigurationResponse
   syncBdaIdp(direction: String, versionName: String, bdaProjectArn: String, saveArn: Boolean, syncMode: String): SyncBdaIdpResponse
-  updatePricing(pricingConfig: JSON!): UpdatePricingResponse
+  updatePricing(pricingConfig: AWSJSON!): UpdatePricingResponse
   restoreDefaultPricing: UpdatePricingResponse
   uploadDocument(
     fileName: String!
@@ -675,7 +686,7 @@ type Mutation {
     modifiedSections: [ModifiedSectionInput!]!
     modifiedPages: [ModifiedPageInput!]
   ): ProcessChangesResponse!
-  completeSectionReview(objectKey: String!, sectionId: String!, editedData: JSON): Document
+  completeSectionReview(objectKey: String!, sectionId: String!, editedData: AWSJSON): Document
   skipAllSectionsReview(objectKey: String!): Document
   claimReview(objectKey: String!): Document
   releaseReview(objectKey: String!): Document
@@ -698,20 +709,20 @@ type Query {
   # Document queries - all authenticated users
   getDocument(ObjectKey: ID!): Document
   listDocuments(
-    startDateTime: DateTime
-    endDateTime: DateTime
+    startDateTime: AWSDateTime
+    endDateTime: AWSDateTime
     limit: Int
     nextToken: String
   ): DocumentPage
   getDocumentCount(
-    startDateTime: DateTime
-    endDateTime: DateTime
+    startDateTime: AWSDateTime
+    endDateTime: AWSDateTime
   ): DocumentCount
   listDocumentsDateHour(date: String, hour: Int): DocumentList
   listDocumentsDateShard(date: String, shard: Int): DocumentList
   listDocumentsByDateRange(
-    startDateTime: DateTime!
-    endDateTime: DateTime!
+    startDateTime: AWSDateTime!
+    endDateTime: AWSDateTime!
     limit: Int
     nextToken: String
   ): DocumentPage
@@ -735,7 +746,7 @@ type Query {
   chatWithDocument(
     s3Uri: String!
     prompt: String!
-    history: JSON!
+    history: AWSJSON!
     modelId: String!
   ): String
 
@@ -749,7 +760,7 @@ type Query {
 
   # Test Studio queries - Admin, Author only
   getTestRun(testRunId: String!): TestRun
-  getTestRuns(timePeriodHours: Int, startDateTime: DateTime, endDateTime: DateTime): [TestRun]
+  getTestRuns(timePeriodHours: Int, startDateTime: AWSDateTime, endDateTime: AWSDateTime): [TestRun]
   getTestRunStatus(testRunId: String!): TestRunStatus
   compareTestRuns(testRunIds: [String!]!): TestRunComparison
   getTestSets: [TestSet]

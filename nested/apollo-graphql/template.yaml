@@ -204,7 +204,8 @@ Resources:
     Properties:
       ApiId: !Ref HttpApi
       AuthorizerType: JWT
-      IdentitySource: "$request.header.Authorization"
+      IdentitySource:
+        - "$request.header.Authorization"
       Name: CognitoJwtAuthorizer
       JwtConfiguration:
         Audience:
@@ -860,7 +861,7 @@ Resources:
         LogGroup: !Ref CreateDocumentResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           LOG_LEVEL: !Ref LogLevel
           DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
       Policies:
@@ -901,7 +902,7 @@ Resources:
         LogGroup: !Ref DeleteDocumentResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           INPUT_BUCKET: !Ref InputBucketName
           OUTPUT_BUCKET: !Ref OutputBucketName
           WORKING_BUCKET: !Ref WorkingBucketName
@@ -950,7 +951,7 @@ Resources:
         LogGroup: !Ref ReprocessDocumentResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           DOCUMENT_QUEUE_URL: !Ref DocumentQueueUrl
           LOG_LEVEL: !Ref LogLevel
       Policies:
@@ -993,7 +994,7 @@ Resources:
         LogGroup: !Ref AbortWorkflowResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           LOG_LEVEL: !Ref LogLevel
       Policies:
         - DynamoDBCrudPolicy:
@@ -1037,7 +1038,7 @@ Resources:
         LogGroup: !Ref ProcessChangesResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           DOCUMENT_QUEUE_URL: !Ref DocumentQueueUrl
           WORKING_BUCKET: !Ref WorkingBucketName
           LOG_LEVEL: !Ref LogLevel
@@ -1464,7 +1465,7 @@ Resources:
         LogGroup: !Ref TestResultsResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
           REPORTING_BUCKET: !Ref ReportingBucketName
           LOG_LEVEL: !Ref LogLevel
@@ -1510,7 +1511,7 @@ Resources:
         LogGroup: !Ref TestRunnerFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
           INPUT_BUCKET: !Ref InputBucketName
           TEST_SET_BUCKET: !Ref TestSetBucketName
@@ -1564,7 +1565,7 @@ Resources:
         LogGroup: !Ref TestSetResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           INPUT_BUCKET: !Ref InputBucketName
           TEST_SET_BUCKET: !Ref TestSetBucketName
           TEST_SET_FILE_COPY_QUEUE_URL: !Ref TestSetFileCopyQueueUrl
@@ -1613,7 +1614,7 @@ Resources:
         LogGroup: !Ref DeleteTestsResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           REPORTING_BUCKET: !Ref ReportingBucketName
           LOG_LEVEL: !Ref LogLevel
       Policies:
@@ -1709,7 +1710,7 @@ Resources:
         LogGroup: !Ref ListDocumentsByDateRangeResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           LOG_LEVEL: !Ref LogLevel
       Policies:
         - DynamoDBReadPolicy:
@@ -1749,7 +1750,7 @@ Resources:
         LogGroup: !Ref ListDocumentsGSIResolverFunctionLogGroup
       Environment:
         Variables:
-          TRACKING_TABLE: !Ref TrackingTableName
+          TRACKING_TABLE_NAME: !Ref TrackingTableName
           LOG_LEVEL: !Ref LogLevel
           USERS_TABLE_NAME: !Ref UsersTableName
       Policies:

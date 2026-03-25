@@ -17,7 +17,7 @@ const lambdaClient = new LambdaClient({});
  * @param {object} identity - User identity from context
  * @returns {Promise<any>} Parsed Lambda response
  */
-export async function invokeLambda(functionName, args, identity) {
+export async function invokeLambda(functionName, args, identity, fieldName) {
   // Build AppSync-compatible event shape
   const event = {
     arguments: args,
@@ -30,6 +30,9 @@ export async function invokeLambda(functionName, args, identity) {
         'cognito:username': identity.username,
         'cognito:groups': identity.groups,
       },
+    },
+    info: {
+      fieldName: fieldName,
     },
   };
 
@@ -58,11 +61,11 @@ export async function invokeLambda(functionName, args, identity) {
  * @returns {Function} Apollo resolver function
  */
 export function createLambdaResolver(envVarName) {
-  return async (_parent, args, context) => {
+  return async (_parent, args, context, info) => {
     const functionArn = process.env[envVarName];
     if (!functionArn) {
       throw new Error(`Lambda function not configured: ${envVarName}`);
     }
-    return invokeLambda(functionArn, args, context.identity);
+    return invokeLambda(functionArn, args, context.identity, info.fieldName);
   };
 }

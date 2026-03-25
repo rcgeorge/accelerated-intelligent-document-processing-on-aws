@@ -202,7 +202,7 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
 
     logger.debug('onCreateDocument subscription');
     const subscription = client.graphql({ query: onCreateDocument }).subscribe({
-      next: (message) => {
+      next: (message: any) => {
         const objectKey = message.data?.onCreateDocument?.ObjectKey || '';
         if (objectKey) {
           // Create a minimal placeholder document from the subscription event.
@@ -241,7 +241,7 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
 
     logger.debug('onUpdateDocument subscription setup');
     const subscription = client.graphql({ query: onUpdateDocument }).subscribe({
-      next: (message) => {
+      next: (message: any) => {
         // Use the subscription event data directly — it already includes all Document fields.
         // No need to call getDocument for each update!
         const documentUpdateEvent = message.data?.onUpdateDocument;

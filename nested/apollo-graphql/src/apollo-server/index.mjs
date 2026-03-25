@@ -14,6 +14,7 @@ import {
   TimestampResolver,
   JSONResolver,
 } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
 
 import { checkAccess, IAM_ONLY_FIELDS } from './rbac.mjs';
 import { createLambdaResolver } from './lambda-invoker.mjs';
@@ -42,6 +43,16 @@ const resolvers = {
   JSON: JSONResolver,
   DateTime: DateTimeResolver,
   Timestamp: TimestampResolver,
+  // AppSync scalar aliases — new GraphQLScalarType instances with correct names
+  // (graphql-scalars resolvers have hardcoded names that must match the schema type)
+  AWSDateTime: new GraphQLScalarType({ name: 'AWSDateTime', ...DateTimeResolver.toConfig(), name: 'AWSDateTime' }),
+  AWSDate: new GraphQLScalarType({ name: 'AWSDate', serialize: DateTimeResolver.serialize, parseValue: DateTimeResolver.parseValue, parseLiteral: DateTimeResolver.parseLiteral }),
+  AWSTimestamp: new GraphQLScalarType({ name: 'AWSTimestamp', serialize: TimestampResolver.serialize, parseValue: TimestampResolver.parseValue, parseLiteral: TimestampResolver.parseLiteral }),
+  AWSJSON: new GraphQLScalarType({ name: 'AWSJSON', serialize: JSONResolver.serialize, parseValue: JSONResolver.parseValue, parseLiteral: JSONResolver.parseLiteral }),
+  AWSEmail: new GraphQLScalarType({ name: 'AWSEmail', serialize: (v) => v, parseValue: (v) => v, parseLiteral: (ast) => ast.value }),
+  AWSIPAddress: new GraphQLScalarType({ name: 'AWSIPAddress', serialize: (v) => v, parseValue: (v) => v, parseLiteral: (ast) => ast.value }),
+  AWSURL: new GraphQLScalarType({ name: 'AWSURL', serialize: (v) => v, parseValue: (v) => v, parseLiteral: (ast) => ast.value }),
+  AWSPhone: new GraphQLScalarType({ name: 'AWSPhone', serialize: (v) => v, parseValue: (v) => v, parseLiteral: (ast) => ast.value }),
 
   Query: {
     // DynamoDB direct resolvers
@@ -206,21 +217,46 @@ export const handler = startServerAndCreateLambdaHandler(
 
       // Extract JWT claims from API Gateway authorizer context
       const authorizer = event.requestContext?.authorizer;
-      if (authorizer?.jwt?.claims) {
+      if (process.env.LOG_LEVEL === 'DEBUG') {
+        console.log('Authorizer context:', JSON.stringify(authorizer));
+      }
+
+      // API Gateway V2 JWT authorizer doesn't forward cognito:groups claim.
+      // Decode the JWT token directly from the Authorization header to get groups.
+      const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+
+      if (token) {
+        try {
+          // Decode JWT payload (base64url) — no verification needed since
+          // API Gateway already validated the token via the JWT authorizer.
+          const payloadB64 = token.split('.')[1];
+          const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+
+          identity.sub = payload.sub || '';
+          identity.username = payload['cognito:username'] || payload.sub || '';
+          identity.email = payload.email || identity.username;
+
+          // cognito:groups is an array in the decoded JWT
+          const groups = payload['cognito:groups'];
+          if (Array.isArray(groups)) {
+            identity.groups = groups;
+          } else if (typeof groups === 'string') {
+            identity.groups = [groups];
+          }
+
+          if (process.env.LOG_LEVEL === 'DEBUG') {
+            console.log('Decoded JWT groups:', identity.groups);
+          }
+        } catch (err) {
+          console.error('Failed to decode JWT:', err.message);
+        }
+      } else if (authorizer?.jwt?.claims) {
+        // Fallback to authorizer context if no Authorization header
         const claims = authorizer.jwt.claims;
         identity.sub = claims.sub || '';
         identity.username = claims['cognito:username'] || claims.sub || '';
         identity.email = claims.email || identity.username;
-
-        // Groups can be a string or array depending on the JWT structure
-        const groups = claims['cognito:groups'];
-        if (typeof groups === 'string') {
-          identity.groups = groups.startsWith('[')
-            ? JSON.parse(groups)
-            : [groups];
-        } else if (Array.isArray(groups)) {
-          identity.groups = groups;
-        }
       }
 
       return { identity };
