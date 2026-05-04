@@ -18,7 +18,18 @@ tracking_table = dynamodb.Table(os.environ['TRACKING_TABLE'])
 
 METRIC_NAMESPACE = os.environ['METRIC_NAMESPACE']
 
-def get_task_token(object_key: str) -> str:
+def get_task_token(object_key: str):
+    """Look up the Step Functions task token recorded for this BDA job.
+
+    When the input was staged under a sanitized key (for BDA URI
+    compatibility), the tasktoken record is keyed on the sanitized
+    key (which is what BDA echoes back in its completion event) and
+    carries the original key under ``OriginalObjectKey``. We return
+    both so the caller can forward the original key downstream.
+
+    Returns a tuple ``(task_token, original_object_key)`` where
+    ``original_object_key`` is ``None`` if the input wasn't staged.
+    """
     try:
         # Get current tracking record using consistent read
         key = f"tasktoken#{object_key}"
@@ -34,7 +45,7 @@ def get_task_token(object_key: str) -> str:
             raise Exception(error_msg)
         
         item = response['Item']
-        return item['TaskToken']
+        return item['TaskToken'], item.get('OriginalObjectKey')
 
     except Exception as e:
         logger.error(f"Error retrieving tracking record: {e}")
@@ -42,17 +53,24 @@ def get_task_token(object_key: str) -> str:
 
 # Using metrics.put_metric directly
 
-def send_task_response(task_token, job_status, job_detail):
+def send_task_response(task_token, job_status, job_detail, original_object_key=None):
     metrics.put_metric('BDAJobsTotal', 1)
     try:
         if job_status == 'SUCCESS':
             logger.info(f"Sending task success for token: {task_token}")
+            output_payload = {
+                'status': "SUCCESS",
+                'job_detail': job_detail,
+            }
+            # When the input was staged under a sanitized key for BDA,
+            # carry the original object key in the payload so
+            # bda_processresults_function uses it as the document
+            # identity instead of the sanitized key BDA echoed back.
+            if original_object_key is not None:
+                output_payload['original_object_key'] = original_object_key
             stepfunctions.send_task_success(
                 taskToken=task_token,
-                output=json.dumps({
-                    'status': "SUCCESS",
-                    'job_detail': job_detail
-                })
+                output=json.dumps(output_payload)
             )
             metrics.put_metric('BDAJobsSucceeded', 1)
         else:
@@ -78,12 +96,16 @@ def handler(event, context):
         
         logger.info(f"Processing job completion for object: {object_key}, status: {job_status}")
         
-        # Get the task token from DynamoDB
-        task_token = get_task_token(object_key)
-        logger.info(f"Retrieved task_token: {task_token}")
+        # Look up the task token. If the input was staged under a
+        # sanitized key, we also recover the original object key.
+        task_token, original_object_key = get_task_token(object_key)
+        logger.info(
+            f"Retrieved task_token for sanitized_key={object_key!r} "
+            f"original_key={original_object_key!r}"
+        )
         
         # Send appropriate response to Step Functions
-        send_task_response(task_token, job_status, detail)
+        send_task_response(task_token, job_status, detail, original_object_key)
         
         response = {
             'statusCode': 200,

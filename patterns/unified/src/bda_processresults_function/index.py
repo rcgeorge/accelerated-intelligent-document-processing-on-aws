@@ -1254,13 +1254,24 @@ def handler(event, context):
 
     # Handle different response formats
     if "BDAResponse" in first_response:
-        # Standard initial processing format
-        object_key = first_response["BDAResponse"]["job_detail"]["input_s3_object"][
-            "name"
-        ]
-        input_bucket = first_response["BDAResponse"]["job_detail"]["input_s3_object"][
-            "s3_bucket"
-        ]
+        # Standard initial processing format.
+        # BDA echoes back the input S3 object name it was given. When the
+        # input was staged under a sanitized key (see bda_invoke_function),
+        # the completion Lambda also forwards the original key under
+        # ``original_object_key``; prefer that so the document identity
+        # matches everything else in the workflow (DynamoDB, UI, output
+        # paths) instead of reverting to the sanitized key.
+        _bda_resp = first_response["BDAResponse"]
+        bda_reported_key = _bda_resp["job_detail"]["input_s3_object"]["name"]
+        object_key = _bda_resp.get("original_object_key") or bda_reported_key
+        input_bucket = _bda_resp["job_detail"]["input_s3_object"]["s3_bucket"]
+        if object_key != bda_reported_key:
+            logger.info(
+                "Mapping BDA-reported sanitized key back to original. "
+                "sanitized=%r original=%r",
+                bda_reported_key,
+                object_key,
+            )
     elif "metadata" in first_response:
         # Blueprint change format
         object_key = first_response["metadata"]["object_key"]
