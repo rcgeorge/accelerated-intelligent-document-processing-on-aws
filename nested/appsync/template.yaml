@@ -241,6 +241,10 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: Whether the circuit breaker feature is enabled
 
+  S3VPCEndpointURL:
+    Type: String
+    Default: ""
+
 Metadata:
   cfn-lint:
     config:
@@ -1776,6 +1780,7 @@ Resources:
           DISCOVERY_QUEUE_URL: !Ref DiscoveryQueueUrl
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTableName
           MULTI_DOC_DISCOVERY_STATE_MACHINE_ARN: !Ref MultiDocDiscoveryStateMachineArn
+          S3_VPC_ENDPOINT_URL: !Ref S3VPCEndpointURL
       LoggingConfig:
         LogGroup: !Ref DiscoveryUploadResolverFunctionLogGroup
       Policies:
@@ -2203,6 +2208,7 @@ Resources:
           CONFIGURATION_BUCKET: !Ref ConfigurationBucketName
           EVALUATION_BASELINE_BUCKET: !Ref EvaluationBaselineBucketName
           REPORTING_BUCKET: !Ref ReportingBucketName
+          S3_VPC_ENDPOINT_URL: !Ref S3VPCEndpointURL
       LoggingConfig:
         LogGroup: !Ref GetFileContentsResolverFunctionLogGroup
       Policies:
@@ -3410,6 +3416,7 @@ Resources:
             - ShouldCreateEvaluationBaselineBucket
             - !Ref EvaluationBaselineBucketName
             - !Ref EvaluationBaselineBucketName
+          S3_VPC_ENDPOINT_URL: !Ref S3VPCEndpointURL
       LoggingConfig:
         LogGroup: !Ref TestSetResolverFunctionLogGroup
       Policies:
@@ -3602,6 +3609,7 @@ Resources:
         Variables:
           LOG_LEVEL: !Ref LogLevel
           INPUT_BUCKET: !Ref InputBucketName
+          S3_VPC_ENDPOINT_URL: !Ref S3VPCEndpointURL
       LoggingConfig:
         LogGroup: !Ref UploadResolverFunctionLogGroup
       Policies:

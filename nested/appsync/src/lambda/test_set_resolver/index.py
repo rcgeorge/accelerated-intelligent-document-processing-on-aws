@@ -36,7 +36,8 @@ s3_config = Config(
     signature_version='s3v4',
     s3={'addressing_style': 'path'}
 )
-s3_client = boto3.client('s3', config=s3_config)
+_s3_endpoint_url = os.environ.get('S3_VPC_ENDPOINT_URL') or None
+s3_client = boto3.client('s3', config=s3_config, endpoint_url=_s3_endpoint_url)
 db_client = DynamoDBClient(table_name=os.environ['TRACKING_TABLE'])
 
 def handler(event, context):

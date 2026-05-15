@@ -92,7 +92,11 @@ const generateS3PresignedUrl = async (
       .split('/')
       .map((segment) => s3EncodeSegment(segment))
       .join('/');
-    const newUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${encodedKey}`;
+    // Use VPC endpoint URL if configured for private access, otherwise use public S3 endpoint
+    const s3VpcEndpointUrl = import.meta.env.VITE_S3_VPC_ENDPOINT_URL;
+    const newUrl = s3VpcEndpointUrl
+      ? `${s3VpcEndpointUrl}/${bucketName}/${encodedKey}`
+      : `https://${bucketName}.s3.${region}.amazonaws.com/${encodedKey}`;
 
     // Parse the URL for the presigner
     const s3ObjectUrl = parseUrl(newUrl);

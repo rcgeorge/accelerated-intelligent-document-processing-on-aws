@@ -28,7 +28,8 @@ logger = Logger()
 app = APIGatewayRestResolver(enable_validation=True)
 
 # Initialize AWS clients
-s3_client = boto3.client("s3", config=boto3.session.Config(signature_version="s3v4"))
+_s3_endpoint_url = os.environ.get('S3_VPC_ENDPOINT_URL') or None
+s3_client = boto3.client("s3", config=boto3.session.Config(signature_version="s3v4"), endpoint_url=_s3_endpoint_url)
 
 # Environment variables
 STAGING_BUCKET = os.environ.get("STAGING_BUCKET_NAME", "")

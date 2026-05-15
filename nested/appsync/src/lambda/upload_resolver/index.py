@@ -20,7 +20,11 @@ s3_config = Config(
     signature_version='s3v4',
     s3={'addressing_style': 'path'}
 )
-s3_client = boto3.client('s3', config=s3_config)
+# Optional: route S3 requests through a VPC Interface Endpoint.
+# When S3_VPC_ENDPOINT_URL is set, presigned URLs will point to the VPC endpoint
+# instead of the public S3 endpoint, enabling private access via Direct Connect or VPN.
+_s3_endpoint_url = os.environ.get('S3_VPC_ENDPOINT_URL') or None
+s3_client = boto3.client('s3', config=s3_config, endpoint_url=_s3_endpoint_url)
 
 # --- inline log sanitizer ---------------------------------------------------
 # Minimal inline redactor. Kept here rather than importing from idp_common to

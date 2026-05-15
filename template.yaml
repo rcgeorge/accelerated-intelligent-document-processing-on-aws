@@ -470,6 +470,17 @@ Parameters:
       Leave empty to automatically use the VPC CIDR range (recommended for
       internal ALBs). Specify explicit CIDRs to override.
 
+  S3VPCEndpointURL:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional HTTPS URL of an S3 Interface VPC Endpoint (e.g.,
+      https://bucket.vpce-0abc123.s3.us-east-1.vpce.amazonaws.com).
+      When provided, presigned upload and download URLs will point to this
+      endpoint instead of the public S3 endpoint. Required for fully private
+      deployments where clients access S3 via Direct Connect or VPN.
+      Leave empty to use the default public S3 endpoint.
+
   AppSyncVisibility:
     Type: String
     Default: GLOBAL
@@ -1302,6 +1313,7 @@ Resources:
           OUTPUT_BUCKET_NAME: !Ref OutputBucket
           STAGING_BUCKET_NAME: !Ref StagingBucket
           DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
+          S3_VPC_ENDPOINT_URL: !Ref S3VPCEndpointURL
       LoggingConfig:
         LogGroup: !Ref ApiHandlerLogGroup
       Events:
@@ -2293,6 +2305,7 @@ Resources:
           - UsePrivateAppSync
           - !Ref LambdaVpcSecurityGroup
           - ""
+        S3VPCEndpointURL: !Ref S3VPCEndpointURL
 
         # Circuit Breaker wiring — feature-flagged; params empty when disabled
         ConcurrencyTableName: !Ref ConcurrencyTable
@@ -9084,6 +9097,8 @@ Resources:
             Value: "4000"
           - Name: VITE_BDA_TOKENS_PER_PAGE
             Value: "2000"
+          - Name: VITE_S3_VPC_ENDPOINT_URL
+            Value: !Ref S3VPCEndpointURL
       TimeoutInMinutes: 30
 
   StartUICodeBuildExecutionRole:
@@ -10347,6 +10362,7 @@ Outputs:
         - 'VITE_DEFAULT_TOKENS_BY_STEP={"OCR":4000,"Classification":2000,"Extraction":8000,"Assessment":4000,"Summarization":4000,"default":4000}'
         - "VITE_DEFAULT_MAX_TOKENS_PER_REQUEST=4000"
         - "VITE_BDA_TOKENS_PER_PAGE=2000"
+        - !Sub "VITE_S3_VPC_ENDPOINT_URL=${S3VPCEndpointURL}"
   ExternalMCPAgentsSecretConsoleURL:
     Description: External MCP Agents secret console URL - configure MCP server credentials here (JSON array format)
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/secretsmanager/secret?name=${AWS::StackName}/external-mcp-agents/credentials&region=${AWS::Region}"

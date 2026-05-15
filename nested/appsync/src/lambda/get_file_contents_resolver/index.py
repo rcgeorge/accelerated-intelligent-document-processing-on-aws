@@ -17,7 +17,8 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 logging.getLogger('idp_common.bedrock.client').setLevel(os.environ.get("BEDROCK_LOG_LEVEL", "INFO"))
 # Get LOG_LEVEL from environment variable with INFO as default
 
-s3_client = boto3.client('s3')
+_s3_endpoint_url = os.environ.get('S3_VPC_ENDPOINT_URL') or None
+s3_client = boto3.client('s3', endpoint_url=_s3_endpoint_url)
 
 
 # Bucket allow-list for get_file_contents.
