@@ -1573,10 +1573,109 @@ Resources:
         - idp-api/jobs.read
         - idp-api/jobs.write
 
-  ApiUserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
+  # Retry-wrapped Cognito user-pool domain. The native
+  # AWS::Cognito::UserPoolDomain fails intermittently with "Invalid request
+  # provided: AWS::Cognito::UserPoolDomain" when created right after the
+  # resource server / app client modify the pool — Cognito's create-domain call
+  # races the pool's eventual-consistency window and the native resource does
+  # not retry. This custom resource creates the domain with retries.
+  ApiDomainFunctionRole:
+    Type: AWS::IAM::Role
     Condition: DeployApiGateway
     Properties:
+      PermissionsBoundary:
+        !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: cognito-domain
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:CreateUserPoolDomain
+                  - cognito-idp:DeleteUserPoolDomain
+                  - cognito-idp:DescribeUserPoolDomain
+                Resource: "*"
+
+  ApiDomainFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployApiGateway
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W92
+            reason: Reserved concurrency not required for a CFN custom resource
+    # Deliberately NOT VPC-attached: it only calls the Cognito control plane
+    # (no VPC endpoint exists for cognito-idp) and posts cfnresponse to S3.
+    Properties:
+      PermissionsBoundary:
+        !If [HasPermissionsBoundary, !Ref PermissionsBoundaryArn, !Ref AWS::NoValue]
+      Handler: index.handler
+      Runtime: python3.12
+      Timeout: 300
+      Role: !GetAtt ApiDomainFunctionRole.Arn
+      InlineCode: |
+        import time
+        import boto3
+        import cfnresponse
+        from botocore.exceptions import ClientError
+
+        c = boto3.client("cognito-idp")
+
+        def handler(event, context):
+            rt = event["RequestType"]
+            props = event.get("ResourceProperties", {})
+            # Cognito domain names must be lowercase; the stack name (used to
+            # build the domain) may contain uppercase letters.
+            domain = (props.get("Domain") or "").lower()
+            pool = props.get("UserPoolId")
+            try:
+                if rt in ("Create", "Update"):
+                    last = None
+                    created = False
+                    for _ in range(12):
+                        try:
+                            c.create_user_pool_domain(Domain=domain, UserPoolId=pool)
+                            created = True
+                            break
+                        except ClientError as e:
+                            msg = str(e).lower()
+                            if "exist" in msg or "already" in msg:
+                                created = True
+                                break
+                            last = e
+                            print("retrying domain create:", e)
+                            time.sleep(15)
+                    if not created:
+                        raise last
+                elif rt == "Delete":
+                    try:
+                        c.delete_user_pool_domain(Domain=domain, UserPoolId=pool)
+                    except Exception as e:
+                        print("delete ignored:", e)
+                cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                 {"Domain": domain}, domain)
+            except Exception as e:
+                print("ERROR:", e)
+                cfnresponse.send(event, context, cfnresponse.FAILED,
+                                 {"Error": str(e)}, domain or "domain")
+
+  ApiUserPoolDomain:
+    Type: Custom::CognitoUserPoolDomain
+    Condition: DeployApiGateway
+    DependsOn:
+      - ApiResourceServer
+      - ApiAppClient
+    Properties:
+      ServiceToken: !GetAtt ApiDomainFunction.Arn
       Domain: !Sub ${AWS::StackName}-api-${AWS::AccountId}
       UserPoolId: !Ref ApiUserPool
 
@@ -9774,6 +9873,10 @@ Resources:
             Subnets: !Ref PrivateSubnetIds
             SecurityGroupIds:
               - !Ref LambdaSecurityGroupId
+              # Dedicated CodeBuild egress SG: internet (via NAT) for the UI
+              # build (npm registry). Runtime Lambdas keep ONLY the locked-down
+              # Lambda SG and stay private.
+              - sg-05774678b48b5dcd2
           - !Ref AWS::NoValue
       Artifacts:
         Type: NO_ARTIFACTS

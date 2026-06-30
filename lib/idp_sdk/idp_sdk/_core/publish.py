@@ -258,19 +258,28 @@ class IDPPublisher:
         self, cmd, component_name, cwd=None, realtime=False
     ):
         """Run subprocess with standardized logging"""
+        # Windows: .cmd/.bat shims (npm, sam) cannot be exec'd directly by
+        # CreateProcess; route them through the shell so they resolve.
+        win_shell = False
+        if sys.platform == "win32":
+            _resolved = cmd[0] if os.path.isabs(cmd[0]) else shutil.which(cmd[0])
+            if _resolved and _resolved.lower().endswith((".cmd", ".bat")):
+                win_shell = True
+        _run_cmd = subprocess.list2cmdline(cmd) if win_shell else cmd
         if realtime:
             # Real-time output for long-running processes like npm install
             self.console.print(f"[cyan]Running: {' '.join(cmd)}[/cyan]")
 
             try:
                 process = subprocess.Popen(
-                    cmd,
+                    _run_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
                     cwd=cwd,
                     bufsize=1,
                     universal_newlines=True,
+                    shell=win_shell,
                 )
 
                 output_lines = []
@@ -322,7 +331,9 @@ OUTPUT:
                 return False, error_msg
         else:
             # Original behavior - capture all output
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            result = subprocess.run(
+                _run_cmd, capture_output=True, text=True, cwd=cwd, shell=win_shell
+            )
             if result.returncode != 0:
                 error_msg = f"""Command failed: {" ".join(cmd)}
 Working directory: {cwd or os.getcwd()}
@@ -895,7 +906,10 @@ STDERR:
             for file in files:
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, config_dir)
-                file_list.append(relative_path)
+                # S3 keys use forward slashes. On Windows os.path.relpath yields
+                # backslashes, which produce invalid S3 keys (NoSuchKey) when the
+                # ConfigurationCopy custom resource copies subdir config files.
+                file_list.append(relative_path.replace(os.sep, "/"))
 
         return sorted(file_list)
 

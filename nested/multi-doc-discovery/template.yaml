@@ -250,6 +250,10 @@ Resources:
             Subnets: !Ref PrivateSubnetIds
             SecurityGroupIds:
               - !Ref LambdaSecurityGroupId
+              # Dedicated CodeBuild egress SG: internet (via NAT) for public
+              # registry pulls (Docker Hub buildkit/base images). Runtime
+              # Lambdas keep ONLY the locked-down Lambda SG and stay private.
+              - sg-05774678b48b5dcd2
           - !Ref AWS::NoValue
       Artifacts:
         Type: NO_ARTIFACTS
